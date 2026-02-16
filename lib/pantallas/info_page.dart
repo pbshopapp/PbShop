@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/documentation_page.dart';
+import 'package:pbshop/pantallas/help_page.dart';
 
 class info_page extends StatelessWidget {
   const info_page({super.key});
@@ -19,6 +20,23 @@ class info_page extends StatelessWidget {
           
           _itemFinanciero("Inversión", "Detalles del proyecto pascualino", Icons.trending_up, Colors.blue),
           
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const help_page()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(vertical: 30),
+            ),
+            icon: const Icon(Icons.description),
+            label: const Text("Ayuda y contacto"),
+          ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: () {
