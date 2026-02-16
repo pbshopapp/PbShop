@@ -1,0 +1,11 @@
+export 'car_page.dart';
+export 'help_page.dart';
+export 'home_page.dart';
+export 'info_page.dart';
+export 'login_page.dart';
+export 'orders_pages.dart';
+export 'product_page.dart';
+export 'profile_page.dart';
+export 'shops_page.dart';
+export 'documentation_page.dart';
+export 'constantes.dart';
