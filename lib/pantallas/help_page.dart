@@ -77,17 +77,11 @@ class help_page extends StatelessWidget {
                 children: [
                   const Text("¿Aún tienes dudas?", style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 15),
-                  ListTile(
-                    leading: const Icon(Icons.support_agent, color: Colors.blue),
-                    title: const Text("Chat de Soporte PB Shop"),
-                    subtitle: const Text("Respuesta inmediata"),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () => _contactarSoporte("Chat"),
-                  ),
+                  
                   ListTile(
                     leading: const Icon(Icons.email_outlined, color: Colors.redAccent),
                     title: const Text("Correo Electrónico"),
-                    subtitle: const Text("soporte@pbshop.edu.co"),
+                    subtitle: const Text("pbshopapp@gmail.com"),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () => _contactarSoporte("Email"),
                   ),
