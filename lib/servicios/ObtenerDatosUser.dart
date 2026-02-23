@@ -1,0 +1,37 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'UserProfile.dart'; // importa el modelo
+
+class ObtenerDatosUser {
+  final SupabaseClient _client = Supabase.instance.client;
+
+  /// Obtiene los datos del usuario desde la tabla `profiles`
+  Future<UserProfile> getDatosUsuario() async {
+    final user = _client.auth.currentUser;
+
+    if (user == null) {
+      return UserProfile(
+        name: "Usuario no registrado",
+        phone: "********",
+        password: "********",
+        avatarUrl: "https://via.placeholder.com/150",
+      );
+    }
+
+    try {
+      final response = await _client
+          .from('profiles')
+          .select('name, phone, password, avatar_url')
+          .eq('id', user.id)
+          .single();
+
+      return UserProfile.fromMap(response);
+    } catch (e) {
+      return UserProfile(
+        name: "Error al obtener datos",
+        phone: "********",
+        password: "********",
+        avatarUrl: "https://via.placeholder.com/150",
+      );
+    }
+  }
+}

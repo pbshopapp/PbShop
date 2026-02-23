@@ -1,12 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/documentation_page.dart';
 import 'package:pbshop/pantallas/help_page.dart';
-import 'package:pbshop/pantallas/login_page.dart'; 
+import 'package:pbshop/pantallas/login_page.dart';
+import 'package:pbshop/widgets/PanelPerfil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:pbshop/pantallas/admin_neg_page.dart'; 
+import 'package:pbshop/pantallas/admin_neg_page.dart';
+import 'package:pbshop/servicios/ObtenerDatosUser.dart';
 
-class info_page extends StatelessWidget {
+class info_page extends StatefulWidget {
   const info_page({super.key});
+
+  @override
+  State<info_page> createState() => _InfoPageState();
+}
+
+class _InfoPageState extends State<info_page> {
+  String nombre = "Usuario no registrado";
+  String telefono = "********";
+  String contrasena = "********";
+  String avatarUrl = "https://via.placeholder.com/150"; // valor por defecto
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarDatos();
+  }
+
+  Future<void> _cargarDatos() async {
+  final obtenerDatosUser = ObtenerDatosUser();
+  final perfil = await obtenerDatosUser.getDatosUsuario();
+
+  setState(() {
+    nombre = perfil.name;
+    telefono = perfil.phone;
+    contrasena = perfil.password;
+    avatarUrl = perfil.avatarUrl;
+  });
+}
 
   @override
   Widget build(BuildContext context) {
@@ -15,82 +45,96 @@ class info_page extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Text("PB Shop", 
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color.fromRGBO(0, 180, 195, 1))),
+          const Text(
+            "PB Shop",
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color.fromRGBO(0, 180, 195, 1),
+            ),
+          ),
           const SizedBox(height: 10),
           const Text("Proyecto de ecosistema digital para el Pascual Bravo."),
           const Divider(height: 40),
-          
-          _itemCreative("Inversión", "Detalles del proyecto pascualino", Icons.trending_up, Colors.blue),
-          
+
+          // Perfil
+          PerfilWidget(
+            nombre: nombre,
+            telefono: telefono,
+            contrasena: contrasena,
+            avatarUrl: avatarUrl,
+          ),
+
           const SizedBox(height: 20),
-          
+
           // Botón Ayuda
           _botonMenu(
-            context, 
-            "Ayuda y contacto", 
-            Icons.help_outline, 
-            const help_page()
+            context,
+            "Ayuda y contacto",
+            Icons.help_outline,
+            const help_page(),
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           // Botón Términos
           _botonMenu(
-            context, 
-            "Términos y condiciones", 
-            Icons.description, 
-            const documentation_page()
+            context,
+            "Términos y condiciones",
+            Icons.description,
+            const documentation_page(),
           ),
 
           const SizedBox(height: 20),
 
           // Botón Panel Admin (solo para negocios)
           _botonMenu(
-            context, 
-            "Panel de Negocio", 
-            Icons.admin_panel_settings_outlined, 
-            const admin_neg_page()
+            context,
+            "Panel de Negocio",
+            Icons.admin_panel_settings_outlined,
+            const admin_neg_page(),
           ),
 
           const SizedBox(height: 20),
+
           // --- SECCIÓN DINÁMICA DE LOGIN / LOGOUT ---
           StreamBuilder<AuthState>(
             stream: Supabase.instance.client.auth.onAuthStateChange,
             builder: (context, snapshot) {
-              // Verificamos si hay una sesión activa
               final session = snapshot.data?.session;
               final bool isLoggedIn = session != null;
 
-              return isLoggedIn 
-                ? _botonCerrarSesion(context) 
-                : _botonIniciarSesion(context);
+              return isLoggedIn
+                  ? _botonCerrarSesion(context)
+                  : _botonIniciarSesion(context);
             },
           ),
         ],
       ),
-    ); 
+    );
   }
-  
-  // Widget para el botón de Iniciar Sesión
+
+  // Botón Iniciar Sesión
   Widget _botonIniciarSesion(BuildContext context) {
     return ElevatedButton.icon(
       onPressed: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const login_page()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const login_page()),
+        );
       },
       style: ElevatedButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 20),
-        
       ),
       icon: const Icon(Icons.login),
       label: const Text("Iniciar Sesión"),
     );
   }
 
-  // Widget para el botón de Cerrar Sesión
+  // Botón Cerrar Sesión
   Widget _botonCerrarSesion(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: () async {
@@ -107,10 +151,12 @@ class info_page extends StatelessWidget {
     );
   }
 
-  // Widget auxiliar para no repetir código de botones
-  Widget _botonMenu(BuildContext context, String titulo, IconData icono, Widget pagina) {
+  // Botón auxiliar
+  Widget _botonMenu(
+      BuildContext context, String titulo, IconData icono, Widget pagina) {
     return ElevatedButton.icon(
-      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => pagina)),
+      onPressed: () =>
+          Navigator.push(context, MaterialPageRoute(builder: (context) => pagina)),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
         foregroundColor: Colors.white,
@@ -119,17 +165,6 @@ class info_page extends StatelessWidget {
       ),
       icon: Icon(icono),
       label: Text(titulo),
-    );
-  }
-
-  Widget _itemCreative(String titulo, String subtitulo, IconData icono, Color color) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icono, color: color)),
-        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitulo),
-      ),
     );
   }
 }
