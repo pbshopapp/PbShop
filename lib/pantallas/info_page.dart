@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/documentation_page.dart';
 import 'package:pbshop/pantallas/help_page.dart';
-import 'package:pbshop/pantallas/login_page.dart'; // Asegúrate de importar tu nueva login_page
+import 'package:pbshop/pantallas/login_page.dart'; 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pbshop/pantallas/admin_neg_page.dart'; 
 
 class info_page extends StatelessWidget {
   const info_page({super.key});
@@ -20,7 +21,7 @@ class info_page extends StatelessWidget {
           const Text("Proyecto de ecosistema digital para el Pascual Bravo."),
           const Divider(height: 40),
           
-          _itemFinanciero("Inversión", "Detalles del proyecto pascualino", Icons.trending_up, Colors.blue),
+          _itemCreative("Inversión", "Detalles del proyecto pascualino", Icons.trending_up, Colors.blue),
           
           const SizedBox(height: 20),
           
@@ -42,8 +43,17 @@ class info_page extends StatelessWidget {
             const documentation_page()
           ),
 
-          const SizedBox(height: 40),
+          const SizedBox(height: 20),
 
+          // Botón Panel Admin (solo para negocios)
+          _botonMenu(
+            context, 
+            "Panel de Negocio", 
+            Icons.admin_panel_settings_outlined, 
+            const admin_neg_page()
+          ),
+
+          const SizedBox(height: 20),
           // --- SECCIÓN DINÁMICA DE LOGIN / LOGOUT ---
           StreamBuilder<AuthState>(
             stream: Supabase.instance.client.auth.onAuthStateChange,
@@ -61,7 +71,7 @@ class info_page extends StatelessWidget {
       ),
     ); 
   }
-
+  
   // Widget para el botón de Iniciar Sesión
   Widget _botonIniciarSesion(BuildContext context) {
     return ElevatedButton.icon(
@@ -69,9 +79,11 @@ class info_page extends StatelessWidget {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const login_page()));
       },
       style: ElevatedButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 15),
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        
       ),
       icon: const Icon(Icons.login),
       label: const Text("Iniciar Sesión"),
@@ -85,9 +97,10 @@ class info_page extends StatelessWidget {
         await Supabase.instance.client.auth.signOut();
       },
       style: OutlinedButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         foregroundColor: Colors.redAccent,
         side: const BorderSide(color: Colors.redAccent),
-        padding: const EdgeInsets.symmetric(vertical: 15),
+        padding: const EdgeInsets.symmetric(vertical: 20),
       ),
       icon: const Icon(Icons.logout),
       label: const Text("Cerrar Sesión"),
@@ -109,7 +122,7 @@ class info_page extends StatelessWidget {
     );
   }
 
-  Widget _itemFinanciero(String titulo, String subtitulo, IconData icono, Color color) {
+  Widget _itemCreative(String titulo, String subtitulo, IconData icono, Color color) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(

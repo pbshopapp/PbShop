@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pbshop/pantallas/inicio_content.dart';
 
 class login_page extends StatefulWidget {
   const login_page({super.key});
@@ -7,17 +10,17 @@ class login_page extends StatefulWidget {
   @override
   State<login_page> createState() => _LoginPageState();
 }
-
 class _LoginPageState extends State<login_page> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _telefonoController = TextEditingController();
+  
   bool _isLoading = false;
+  // CAMBIO 1: Ahora _isLogin empieza en 'true' para mostrar primero el inicio de sesión
+  bool _isLogin = true; 
+
   String _extraerNombreDelCorreo(String email) {
-    // 1. Quitamos el dominio @pascualbravo.edu.co
     String parteInicial = email.split('@')[0]; 
-    
-    // 2. Reemplazamos los puntos por espacios y ponemos la primera letra en mayúscula
-    // Ejemplo: "juan.perez" -> "Juan Perez"
     List<String> palabras = parteInicial.split('.');
     return palabras.map((p) {
       if (p.isEmpty) return "";
@@ -25,29 +28,31 @@ class _LoginPageState extends State<login_page> {
     }).join(' ');
   }
 
-  Future<void> _signUp() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (!email.endsWith('@pascualbravo.edu.co')) {
-      _mostrarError("Usa tu correo institucional");
-      return;
-    }
-
-    // EXTRAEMOS EL NOMBRE AUTOMÁTICAMENTE
-    String nombreExtraido = _extraerNombreDelCorreo(email);
-
+  // FUNCIÓN PARA INICIAR SESIÓN
+  Future<void> _signIn() async {
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.auth.signUp(
-        email: email,
-        password: password,
-        data: {
-          'nombre': nombreExtraido, // Se guarda en raw_user_meta_data
-          'rol': 'estudiante',
-        },
+      final response = await Supabase.instance.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
       );
-      _mostrarExito("¡Cuenta creada para $nombreExtraido!");
+
+      if (response.user != null) {
+        // Consultamos el rol para saber a dónde mandarlo
+        final perfil = await Supabase.instance.client
+            .from('perfiles')
+            .select('rol')
+            .eq('id', response.user!.id)
+            .maybeSingle();
+
+        if (mounted) {
+          if (perfil != null && perfil['rol'] == 'admin_negocio') {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const admin_neg_page()));
+          } else {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InicioContent()));
+          }
+        }
+      }
     } on AuthException catch (error) {
       _mostrarError(error.message);
     } finally {
@@ -55,61 +60,142 @@ class _LoginPageState extends State<login_page> {
     }
   }
 
-  void _mostrarError(String mensaje) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje), backgroundColor: Colors.red));
+  // TU FUNCIÓN DE REGISTRO (Se queda casi igual)
+  Future<void> _signUp() async {
+    final email = _emailController.text.trim();
+    if (!email.endsWith('@pascualbravo.edu.co')) {
+      _mostrarError("Usa tu correo institucional");
+      return;
+    }
+    // ... validación de teléfono ...
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: _passwordController.text.trim(),
+        data: {
+          'nombre': _extraerNombreDelCorreo(email),
+          'telefono': _telefonoController.text.trim(),
+          'rol': 'estudiante',
+        },
+      );
+      _mostrarExito("¡Cuenta creada! Revisa tu correo.");
+    } on AuthException catch (error) {
+      _mostrarError(error.message);
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
-  void _mostrarExito(String mensaje) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje), backgroundColor: Colors.green));
-  }
+  void _mostrarError(String mensaje) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje), backgroundColor: Colors.red));
+  void _mostrarExito(String mensaje) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje), backgroundColor: Colors.green));
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Acceso PB Shop")),
+      // CAMBIO 2: Título dinámico según el estado
+      appBar: AppBar(
+        title: Text(_isLogin ? "Iniciar Sesión" : "Crear Cuenta PB Shop"),
+        backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+        foregroundColor: Colors.white,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            const Icon(Icons.account_circle, size: 80, color: Color.fromRGBO(0, 180, 195, 1)),
-            const SizedBox(height: 20),
+            const Icon(
+              Icons.account_circle, 
+              size: 80, 
+              color: Color.fromRGBO(0, 180, 195, 1)
+            ),
+            const SizedBox(height: 30),
+            
+            // CAMPO EMAIL
             TextField(
               controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
-                labelText: 'Correo @pascualbravo.edu.co',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.email),
+                labelText: 'Correo @pascualbravo.edu.co', 
+                border: OutlineInputBorder(), 
+                prefixIcon: Icon(Icons.email)
               ),
             ),
             const SizedBox(height: 15),
+            
+            // CAMPO PASSWORD
             TextField(
               controller: _passwordController,
               obscureText: true,
               decoration: const InputDecoration(
-                labelText: 'Contraseña',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock),
+                labelText: 'Contraseña', 
+                border: OutlineInputBorder(), 
+                prefixIcon: Icon(Icons.lock)
               ),
             ),
-            const SizedBox(height: 20),
-            
-            if (_isLoading) const CircularProgressIndicator()
-            else ...[
-              ElevatedButton(
-                onPressed: _signUp, // Botón de Crear Cuenta
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
-                  minimumSize: const Size(double.infinity, 50),
+            const SizedBox(height: 15),
+
+            // CAMPO TELÉFONO (Solo se muestra en modo Registro)
+            if (!_isLogin) ...[
+              TextField(
+                controller: _telefonoController,
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: "Teléfono Celular",
+                  prefixText: "+57 ",
+                  counterText: "",
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.phone),
                 ),
-                child: const Text("Crear Cuenta", style: TextStyle(color: Colors.white)),
               ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () { /* Aquí podrías llamar a signIn normal */ },
-                child: const Text("¿Ya tienes cuenta? Inicia sesión"),
-              ),
+              const SizedBox(height: 20),
             ],
 
+            const SizedBox(height: 10),
+
+            if (_isLoading) 
+              const CircularProgressIndicator()
+            else ...[
+              // BOTÓN PRINCIPAL
+              ElevatedButton(
+                onPressed: () {
+                  if (_isLogin) {
+                    _signIn();
+                  } else {
+                    if (_telefonoController.text.length == 10) {
+                      _signUp();
+                    } else {
+                      _mostrarError("El teléfono debe tener 10 dígitos");
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text(_isLogin ? "ENTRAR" : "REGISTRARME"),
+              ),
+              
+              const SizedBox(height: 15),
+              
+              // BOTÓN PARA CAMBIAR DE MODO
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _isLogin = !_isLogin;
+                  });
+                },
+                child: Text(
+                  _isLogin 
+                    ? "¿No tienes cuenta? Regístrate aquí" 
+                    : "¿Ya tienes cuenta? Inicia sesión",
+                  style: const TextStyle(color: Color.fromRGBO(0, 140, 155, 1)),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -38,9 +38,9 @@ class _HomePageState extends State<home_page> {
             unselectedItemColor: Colors.grey,
             items: const [
               BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Inicio'),
-              BottomNavigationBarItem(icon: Icon(Icons.category), label: 'Explorar'),
+              BottomNavigationBarItem(icon: Icon(Icons.shopping_bag_outlined), activeIcon: Icon(Icons.shopping_bag), label: 'Explorar'),
               BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_checkout), activeIcon: Icon(Icons.shopping_cart), label: 'Pedidos'),
-              BottomNavigationBarItem(icon: Icon(Icons.info_outline), activeIcon: Icon(Icons.info), label: 'Info'),
+              BottomNavigationBarItem(icon: Icon(Icons.person_2_outlined), activeIcon: Icon(Icons.person), label: 'Perfil'),
             ],
           ),
         ),
