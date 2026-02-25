@@ -1,11 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:pbshop/widgets/mostrarestrellas.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // Importante importar Supabase
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pbshop/servicios/CartService.dart' as CartServiceLib; // El único que debe traer CartService
+import 'package:pbshop/pantallas/car_page.dart';    // Solo para la navegación
 
 class product_page extends StatelessWidget {
   final Map producto;
 
   const product_page({super.key, required this.producto});
+
+  // --- FUNCIÓN LÓGICA PARA AGREGAR AL CARRITO ---
+  void _agregarAlPedido(BuildContext context) {
+  CartServiceLib.CartService().agregarProducto({
+    'id': producto['id'].toString(), // Forzamos a String
+    'nombre': producto['nombre'],
+    'precio': producto['precio'],
+    'fk_negocio': producto['fk_negocio'], 
+  });
+
+    // 3. Feedback visual para el usuario
+    ScaffoldMessenger.of(context).hideCurrentSnackBar(); // Limpia notificaciones previas
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("✅ ${producto['nombre']} agregado"),
+        backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: "VER CARRITO",
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const car_page()),
+            );
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +71,6 @@ class product_page extends StatelessWidget {
                   const Text("Reseñas de la Comunidad", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
                   
-                  // --- AQUÍ EL CAMBIO REAL: STREAM DE RESEÑAS ---
                   _seccionResenasReales(),
                 ],
               ),
@@ -48,32 +79,26 @@ class product_page extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: Padding(
-
-        padding: const EdgeInsets.all(8.0),
-
+        padding: const EdgeInsets.all(16.0), // Aumenté un poco el padding para mejor estética
         child: ElevatedButton(
-
-          onPressed: () {}, // Aquí irá la lógica de agregar al carrito
-
+          // 4. LLAMADA A LA FUNCIÓN ACTUALIZADA
+          onPressed: () => _agregarAlPedido(context), 
           style: ElevatedButton.styleFrom(
-
             backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
-
-            minimumSize: const Size(double.infinity, 50),
-
+            minimumSize: const Size(double.infinity, 55), // Botón ligeramente más alto
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-
-          child: const Text("Agregar al Pedido", style: TextStyle(color: Colors.white)),
-
+          child: const Text(
+            "Agregar al Pedido", 
+            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+          ),
         ),
-
       ),
     );
   }
 
   Widget _seccionResenasReales() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      // Filtramos las reseñas: traeme solo las donde fk_producto sea igual al id de este producto
       stream: Supabase.instance.client
           .from('resenas')
           .stream(primaryKey: ['id'])
@@ -97,7 +122,6 @@ class product_page extends StatelessWidget {
           children: resenas.map((resena) {
             return ListTile(
               contentPadding: EdgeInsets.zero,
-              // Usamos tu widget para mostrar las estrellas según la puntuación de la DB
               title: mostrarEstrellas(resena['puntuacion'] ?? 0),
               subtitle: Text(resena['comentario'] ?? ""),
               leading: const CircleAvatar(

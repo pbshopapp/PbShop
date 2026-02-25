@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/inicio_content.dart';
 import 'package:pbshop/pantallas/info_page.dart';
 import 'package:pbshop/pantallas/shops_page.dart';
+import 'package:pbshop/pantallas/car_page.dart';
 
 class home_page extends StatefulWidget {
   const home_page({super.key});
@@ -16,7 +17,7 @@ class _HomePageState extends State<home_page> {
   final List<Widget> _vistas = [
     const InicioContent(), 
     const shops_page(), 
-    const Center(child: Text("Pantalla de Pedidos/Historial")),
+    const car_page(),
     const info_page(),
   ];
 

@@ -18,7 +18,7 @@ class _InicioContentState extends State<InicioContent> {
   @override
   Widget build(BuildContext context) {
     // Pedimos el stream completo de la vista.
-    final Stream<List<Map<String, dynamic>>> _productosStream = Supabase.instance.client
+    final Stream<List<Map<String, dynamic>>> productosStream = Supabase.instance.client
         .from('v_productos_con_rating')
         .stream(primaryKey: ['id']);
 
@@ -43,7 +43,7 @@ class _InicioContentState extends State<InicioContent> {
           ),
           
           StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _productosStream,
+            stream: productosStream,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const SliverToBoxAdapter(

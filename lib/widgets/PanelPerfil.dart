@@ -7,12 +7,12 @@ class PerfilWidget extends StatelessWidget {
   final String avatarUrl;
 
   const PerfilWidget({
-    Key? key,
+    super.key,
     required this.nombre,
     required this.telefono,
     required this.contrasena,
     required this.avatarUrl,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
