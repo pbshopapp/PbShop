@@ -41,7 +41,8 @@ class CartService with ChangeNotifier {
       _items.add(ItemCarrito(
         id: prodId,
         nombre: producto['nombre'],
-        precioUnitario: producto['precio'],
+        // Usamos .toInt() para asegurar que sea int
+        precioUnitario: (producto['precio'] as num).toInt(),
         fkNegocio: producto['fk_negocio'],
       ));
     }

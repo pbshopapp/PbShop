@@ -12,7 +12,7 @@ class car_page extends StatefulWidget {
 class _car_pageState extends State<car_page> {
   bool _isConfirming = false;
   final _cartService = CartService();
-  int _pedidosActivos = 3; // Esto podrías consultarlo con un count en Supabase
+  final int _pedidosActivos = 3; // Esto podrías consultarlo con un count en Supabase
 
   // --- FUNCIÓN RESTAURADA: CONFIRMAR PEDIDO ---
   Future<void> _confirmarPedido() async {

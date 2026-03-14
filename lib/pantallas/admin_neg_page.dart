@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/ProductosService.dart';
+import 'package:pbshop/pantallas/agregar_productos_page.dart';
 
 class admin_neg_page extends StatefulWidget {
   const admin_neg_page({super.key});
@@ -140,7 +141,7 @@ class _AdminNegPageState extends State<admin_neg_page> {
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: () => _mostrarVentanaNuevoProducto(context),
+            onPressed: () => agregar_productos_page(),
             icon: const Icon(Icons.add),
             label: const Text("Agregar Producto Nuevo"),
             style: ElevatedButton.styleFrom(

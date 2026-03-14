@@ -82,7 +82,16 @@ class product_page extends StatelessWidget {
         padding: const EdgeInsets.all(16.0), // Aumenté un poco el padding para mejor estética
         child: ElevatedButton(
           // 4. LLAMADA A LA FUNCIÓN ACTUALIZADA
-          onPressed: () => _agregarAlPedido(context), 
+          onPressed: () {
+            print("Botón presionado en Android"); // Esto aparecerá en tu terminal de VS Code
+            
+            // Feedback visual inmediato para el usuario en el celular
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Intentando agregar al pedido..."))
+            );
+
+            _agregarAlPedido(context); 
+          },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
             minimumSize: const Size(double.infinity, 55), // Botón ligeramente más alto
