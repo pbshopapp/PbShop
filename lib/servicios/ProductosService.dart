@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProductosService {
   final _supabase = Supabase.instance.client;
 
-  Future<void> crearProductoAutomatico(BuildContext context, String nombre, int precio) async {
+  Future<void> crearProductoAutomatico(
+  BuildContext context, 
+  String nombre, 
+  double precio, // <--- CAMBIAR AQUÍ
+  String descripcion, 
+  List<XFile> imagenes) async {
     final user = _supabase.auth.currentUser;
 
     if (user == null) {

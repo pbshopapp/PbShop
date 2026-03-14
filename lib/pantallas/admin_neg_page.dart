@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/ProductosService.dart';
-import 'package:pbshop/pantallas/agregar_productos_page.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class admin_neg_page extends StatefulWidget {
   const admin_neg_page({super.key});
@@ -141,7 +142,7 @@ class _AdminNegPageState extends State<admin_neg_page> {
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: () => agregar_productos_page(),
+            onPressed: () => _mostrarVentanaNuevoProducto(context),
             icon: const Icon(Icons.add),
             label: const Text("Agregar Producto Nuevo"),
             style: ElevatedButton.styleFrom(
@@ -219,63 +220,204 @@ class _AdminNegPageState extends State<admin_neg_page> {
     );
   }
 
-  void _mostrarVentanaNuevoProducto(BuildContext context) {
-    final nomController = TextEditingController();
-    final preController = TextEditingController();
+void _mostrarVentanaNuevoProducto(BuildContext context) {
+  final nomController = TextEditingController();
+  final preController = TextEditingController();
+  final descController = TextEditingController(); 
+  
+  // Lista para guardar las imágenes seleccionadas localmente
+  List<XFile> imagenesSeleccionadas = []; 
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 20, right: 20, top: 20
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Nuevo Producto", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const Text("Completa los datos para publicar", style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: nomController, 
-              decoration: const InputDecoration(labelText: "Nombre del producto", border: OutlineInputBorder())
+  // Variable de control para evitar que se abra la galería dos veces
+  bool estaAbriendoGaleria = false; 
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20))
+    ),
+    builder: (context) => StatefulBuilder(
+      builder: (context, setModalState) {
+        
+        // Función interna para seleccionar imágenes con protección
+        Future<void> seleccionarImagenes() async {
+          if (estaAbriendoGaleria) return; // Bloqueo si ya está activa
+
+          try {
+            estaAbriendoGaleria = true; 
+            final ImagePicker picker = ImagePicker();
+            
+            // Abrir selector múltiple
+            final List<XFile> images = await picker.pickMultiImage();
+            
+            if (images.isNotEmpty) {
+              setModalState(() {
+                // Agregamos las nuevas a las existentes y limitamos a 3
+                imagenesSeleccionadas = [...imagenesSeleccionadas, ...images].take(3).toList();
+              });
+            }
+          } catch (e) {
+            debugPrint("Error al seleccionar imágenes: $e");
+          } finally {
+            estaAbriendoGaleria = false; // Liberar el bloqueo siempre
+          }
+        }
+
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 20, right: 20, top: 20
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Nuevo Producto", 
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text("Completa los datos para publicar", 
+                  style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 20),
+                
+                // Campo Nombre
+                TextField(
+                  controller: nomController, 
+                  decoration: const InputDecoration(
+                    labelText: "Nombre del producto", 
+                    border: OutlineInputBorder()
+                  )
+                ),
+                const SizedBox(height: 15),
+
+                // Campo Descripción
+                TextField(
+                  controller: descController, 
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: "Descripción", 
+                    border: OutlineInputBorder(), 
+                    alignLabelWithHint: true
+                  )
+                ),
+                const SizedBox(height: 15),
+
+                // Campo Precio (Corregido para Android)
+                TextField(
+                  controller: preController, 
+                  decoration: const InputDecoration(
+                    labelText: "Precio", 
+                    border: OutlineInputBorder(), 
+                    prefixText: "\$ "
+                  ), 
+                  keyboardType: TextInputType.number
+                ),
+                const SizedBox(height: 20),
+
+                // Sección de Selección de Imágenes
+                const Text("Imágenes (Máximo 3)", 
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                
+                Row(
+                  children: [
+                    // Botón para agregar nueva foto
+                    if (imagenesSeleccionadas.length < 3)
+                      GestureDetector(
+                        onTap: seleccionarImagenes,
+                        child: Container(
+                          height: 80, width: 80,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey), 
+                            borderRadius: BorderRadius.circular(10)
+                          ),
+                          child: const Icon(Icons.add_a_photo, color: Colors.grey),
+                        ),
+                      ),
+                    const SizedBox(width: 10),
+                    
+                    // Lista horizontal de vistas previas
+                    Expanded(
+                      child: SizedBox(
+                        height: 80,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: imagenesSeleccionadas.length,
+                          itemBuilder: (context, index) {
+                            return Stack(
+                              children: [
+                                Container(
+                                  margin: const EdgeInsets.only(right: 10),
+                                  width: 80,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    image: DecorationImage(
+                                      image: FileImage(File(imagenesSeleccionadas[index].path)),
+                                      fit: BoxFit.cover
+                                    )
+                                  ),
+                                ),
+                                // Botón para eliminar imagen individual
+                                Positioned(
+                                  top: 0, right: 5,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setModalState(() {
+                                        imagenesSeleccionadas.removeAt(index);
+                                      });
+                                    },
+                                    child: const CircleAvatar(
+                                      radius: 10, 
+                                      backgroundColor: Colors.red, 
+                                      child: Icon(Icons.close, size: 12, color: Colors.white)
+                                    ),
+                                  ),
+                                )
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+                
+                const SizedBox(height: 25),
+                
+                // Botón Publicar Ahora
+                ElevatedButton(
+                  onPressed: () async {
+                    if (nomController.text.isNotEmpty && preController.text.isNotEmpty) {
+                      try {
+                        // Asegúrate de que ProductosService reciba double y la lista de XFile
+                        await ProductosService().crearProductoAutomatico(
+                          context, 
+                          nomController.text, 
+                          double.parse(preController.text), 
+                          descController.text, 
+                          imagenesSeleccionadas, 
+                        );
+                        
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                        debugPrint("Error al publicar: $e");
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 50), 
+                    backgroundColor: Colors.green, 
+                    foregroundColor: Colors.white
+                  ),
+                  child: const Text("Publicar Ahora"),
+                ),
+                const SizedBox(height: 20),
+              ],
             ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: preController, 
-              decoration: const InputDecoration(labelText: "Precio", border: OutlineInputBorder(), prefixText: "\$ "), 
-              keyboardType: TextInputType.number
-            ),
-            const SizedBox(height: 25),
-            ElevatedButton(
-              onPressed: () async {
-                if (nomController.text.isNotEmpty && preController.text.isNotEmpty) {
-                  try {
-                    await ProductosService().crearProductoAutomatico(
-                      context, 
-                      nomController.text, 
-                      int.parse(preController.text)
-                    );
-                    if (context.mounted) Navigator.pop(context);
-                  } catch (e) {
-                    debugPrint("Error al crear: $e");
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50), 
-                backgroundColor: Colors.green, 
-                foregroundColor: Colors.white
-              ),
-              child: const Text("Publicar Ahora"),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
+          ),
+        );
+      }
+    ),
+  );
+}
 }
