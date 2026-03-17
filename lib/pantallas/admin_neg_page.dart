@@ -200,7 +200,7 @@ class _AdminNegPageState extends State<admin_neg_page> {
     );
   }
 
-  void _confirmarEliminacion(int id, String nombre) {
+  void _confirmarEliminacion(String id, String nombre) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
