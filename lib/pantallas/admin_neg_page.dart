@@ -155,22 +155,76 @@ class _AdminNegPageState extends State<admin_neg_page> {
     );
   }
 
-  void _confirmarEliminacion(String id, String nombre) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Eliminar"),
-        content: Text("¿Eliminar $nombre?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("No")),
-          TextButton(onPressed: () async {
-            await _supabase.from('productos').delete().eq('id', id);
-            Navigator.pop(context);
-          }, child: const Text("Eliminar", style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-  }
+void _confirmarEliminacion(dynamic id, String nombre) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text("Eliminar Producto"),
+      content: Text("¿Estás seguro de eliminar \"$nombre\"? Se borrarán sus datos y archivos del servidor."),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+        TextButton(
+          onPressed: () async {
+            try {
+              final String productoId = id.toString();
+              // Obtenemos el ID del negocio que ya tienes cargado en la clase
+              final String negocioId = datosNegocio!['id'].toString();
+
+              // 1. RUTA DINÁMICA SEGÚN TU ESTRUCTURA
+              // La ruta es: "ID_NEGOCIO/ID_PRODUCTO"
+              final String rutaCarpeta = "$negocioId/$productoId";
+
+              debugPrint("Listando archivos en: $rutaCarpeta");
+
+              // 2. LISTAR ARCHIVOS DENTRO DE LA CARPETA DEL PRODUCTO
+              final List<FileObject> archivos = await _supabase
+                  .storage
+                  .from('productos')
+                  .list(path: rutaCarpeta);
+
+              if (archivos.isNotEmpty) {
+                // Creamos las rutas completas para borrar: "negocio/producto/archivo.jpg"
+                final List<String> rutasABorrar = archivos
+                    .map((file) => "$rutaCarpeta/${file.name}")
+                    .toList();
+
+                // 3. BORRAR ARCHIVOS FÍSICOS
+                await _supabase
+                    .storage
+                    .from('productos')
+                    .remove(rutasABorrar);
+                
+                debugPrint("✅ Archivos borrados: ${rutasABorrar.length}");
+              }
+
+              // 4. BORRAR REGISTRO DE LA BASE DE DATOS
+              await _supabase
+                  .from('productos')
+                  .delete()
+                  .eq('id', productoId);
+
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("✅ $nombre eliminado por completo"))
+                );
+              }
+            } catch (e) {
+              debugPrint("❌ Error en borrado total: $e");
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+                );
+              }
+            }
+          },
+          child: const Text("Eliminar", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    ),
+  );
+}
 
   void _mostrarVentanaNuevoProducto(BuildContext context) {
     final nomController = TextEditingController();
