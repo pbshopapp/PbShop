@@ -6,7 +6,6 @@ import 'package:image_picker/image_picker.dart';
 
 class admin_neg_page extends StatefulWidget {
   const admin_neg_page({super.key});
-
   @override
   State<admin_neg_page> createState() => _AdminNegPageState();
 }
@@ -15,11 +14,20 @@ class _AdminNegPageState extends State<admin_neg_page> {
   final _supabase = Supabase.instance.client;
   Map<String, dynamic>? datosNegocio;
   bool _cargando = true;
+  List<Map<String, dynamic>> categorias = []; // Lista de la BD
+  String? categoriaSeleccionada; // ID de la categoría elegida
 
   @override
   void initState() {
     super.initState();
     _cargarDatosNegocio();
+    _cargarCategorias();
+  }
+  Future<void> _cargarCategorias() async {
+    final data = await _supabase.from('categorias').select('id, nombre');
+    setState(() {
+      categorias = List<Map<String, dynamic>>.from(data);
+    });
   }
 
   Future<void> _cargarDatosNegocio() async {
@@ -302,6 +310,29 @@ void _mostrarVentanaNuevoProducto(BuildContext context) {
                 ),
                 const SizedBox(height: 15),
 
+                DropdownButtonFormField<String>(
+                    value: categoriaSeleccionada,
+                    decoration: const InputDecoration(
+                      labelText: "Categoría",
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.category_outlined),
+                    ),
+                    items: categorias.map((cat) {
+                      return DropdownMenuItem(
+                        value: cat['id'].toString(),
+                        child: Text(cat['nombre']),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setModalState(() { 
+                        categoriaSeleccionada = newValue;
+                      });
+                    },
+                    validator: (value) => value == null ? 'Selecciona una categoría' : null,
+                ),
+
+                const SizedBox(height: 15),
+
                 // Campo Precio (Corregido para Android)
                 TextField(
                   controller: preController, 
@@ -391,12 +422,13 @@ void _mostrarVentanaNuevoProducto(BuildContext context) {
                       try {
                         // Asegúrate de que ProductosService reciba double y la lista de XFile
                         await ProductosService().crearProductoAutomatico(
-                          context, 
-                          nomController.text, 
-                          double.parse(preController.text), 
-                          descController.text, 
-                          imagenesSeleccionadas, 
-                        );
+                        context, 
+                        nomController.text, 
+                        double.parse(preController.text), 
+                        descController.text, 
+                        imagenesSeleccionadas,
+                        categoriaSeleccionada!,
+                      );
                         
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {

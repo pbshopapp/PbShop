@@ -11,75 +11,80 @@ class ProductosService {
     double precio,
     String descripcion,
     List<XFile> imagenes,
+    String fkCategoria,
   ) async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) throw 'Sesión expirada';
 
-      // 1. Obtener datos del negocio
+      // 1. Obtener ID del negocio del perfil del usuario
       final perfil = await _supabase
           .from('perfiles')
           .select('fk_negocio')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
-      final String? fkNegocio = perfil['fk_negocio'];
-      if (fkNegocio == null) throw 'No tienes un negocio vinculado';
+      if (perfil == null || perfil['fk_negocio'] == null) {
+        throw 'No tienes un negocio vinculado para publicar productos';
+      }
 
-      // 2. Insertar PRIMERO el producto para obtener su ID
-      // Usamos .select().single() para que nos devuelva la fila recién creada
+      final String fkNegocio = perfil['fk_negocio'].toString();
+
+      // 2. Insertar el producto para obtener su ID único (UUID)
       final nuevoProducto = await _supabase.from('productos').insert({
         'nombre': nombre,
         'descripcion': descripcion,
         'precio': precio,
         'fk_negocio': fkNegocio,
+        'fk_categoria': fkCategoria,
         'disponible': true,
-        // Opcional: dejamos imagen_url con la primera foto como 'portada'
       }).select().single();
 
-      final String productoId = nuevoProducto['id'];
+      final String productoId = nuevoProducto['id'].toString();
 
-      // 3. Preparar carpetas y subir imágenes
-      final String nombreProductoFolder = nombre
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9]'), '_');
-
+      // 3. Subir imágenes con la estructura: negocio_id / producto_id / imagen_N
       List<Map<String, dynamic>> registrosImagenes = [];
 
-      for (var img in imagenes) {
+      for (int i = 0; i < imagenes.length; i++) {
+        final img = imagenes[i];
         final bytes = await img.readAsBytes();
         final extension = img.path.split('.').last.toLowerCase();
         
-        // Estructura: negocio_id / nombre_producto / timestamp.ext
-        final fileName = '$fkNegocio/$nombreProductoFolder/${DateTime.now().millisecondsSinceEpoch}.$extension';
+        // ESTRUCTURA: Carpeta_Negocio / Carpeta_Producto / imagen_N.ext
+        // Usamos el ID del producto para que la carpeta sea única y no haya choques de nombres
+        final String pathFinal = '$fkNegocio/$productoId/imagen_${i + 1}.$extension';
 
         await _supabase.storage.from('productos').uploadBinary(
-          fileName,
+          pathFinal,
           bytes,
-          fileOptions: FileOptions(contentType: 'image/$extension'),
+          fileOptions: FileOptions(
+            contentType: 'image/$extension',
+            upsert: true, // Si por algún motivo ya existe, lo sobrescribe
+          ),
         );
 
-        final url = _supabase.storage.from('productos').getPublicUrl(fileName);
+        // Obtener la URL pública de la imagen recién subida
+        final url = _supabase.storage.from('productos').getPublicUrl(pathFinal);
         
-        // Guardamos la relación: ID del producto y su URL
         registrosImagenes.add({
           'fk_producto': productoId,
           'url': url,
         });
       }
 
-      // 4. Insertar todas las URLs en la nueva entidad 'imagenes_producto'
+      // 4. Guardar las URLs en la tabla secundaria y actualizar la principal
       if (registrosImagenes.isNotEmpty) {
+        // Insertar todas las imágenes en 'imagenes_producto'
         await _supabase.from('imagenes_producto').insert(registrosImagenes);
         
-        // OPCIONAL: Actualizar la 'imagen_url' principal del producto con la primera foto
+        // Establecer la primera imagen como la principal del producto
         await _supabase.from('productos')
             .update({'imagen_url': registrosImagenes.first['url']})
             .eq('id', productoId);
       }
 
     } catch (e) {
-      debugPrint("Error catastrófico: $e");
+      debugPrint("Error en ProductosService: $e");
       rethrow;
     }
   }
