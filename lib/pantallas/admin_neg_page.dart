@@ -142,11 +142,38 @@ class _AdminNegPageState extends State<admin_neg_page> {
           itemBuilder: (context, index) {
             final prod = productos[index];
             return ListTile(
-              title: Text(prod['nombre']),
-              subtitle: Text("\$${prod['precio']}"),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () => _confirmarEliminacion(prod['id'], prod['nombre']),
+              leading: prod['imagen_url'] != null 
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      prod['imagen_url'], 
+                      width: 50, 
+                      height: 50, 
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.image_not_supported),
+                    ),
+                  )
+                : const Icon(Icons.image, size: 50),
+              title: Text(
+                prod['nombre'], 
+                style: const TextStyle(fontWeight: FontWeight.bold)
+              ),
+              subtitle: Text("\$ ${prod['precio']}"),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min, // Importante para que el Row no ocupe toda la pantalla
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                    onPressed: () {
+                      // Aquí llamarías a tu función de edición pasando el producto
+                      _mostrarVentanaEditarProducto(context, prod);
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _confirmarEliminacion(prod['id'], prod['nombre']),
+                  ),
+                ],
               ),
             );
           },
@@ -154,6 +181,128 @@ class _AdminNegPageState extends State<admin_neg_page> {
       },
     );
   }
+
+void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> producto) {
+  final nomController = TextEditingController(text: producto['nombre']);
+  final preController = TextEditingController(text: producto['precio'].toString());
+  final descController = TextEditingController(text: producto['descripcion'] ?? "");
+  String? categoriaEdit = producto['fk_categoria']?.toString();
+  
+  List<XFile> imagenesNuevasAEspera = [];
+  bool estaCargando = false;
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (context) => StatefulBuilder(
+      builder: (context, setModalState) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 20, right: 20, top: 20
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("Editar Producto", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 15),
+                
+                TextField(controller: nomController, decoration: const InputDecoration(labelText: "Nombre", border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                
+                TextField(controller: descController, maxLines: 2, decoration: const InputDecoration(labelText: "Descripción", border: OutlineInputBorder())),
+                const SizedBox(height: 10),
+                
+                DropdownButtonFormField<String>(
+                  value: categoriaEdit,
+                  items: categorias.map((cat) => DropdownMenuItem(value: cat['id'].toString(), child: Text(cat['nombre']))).toList(),
+                  onChanged: (val) => setModalState(() => categoriaEdit = val),
+                  decoration: const InputDecoration(labelText: "Categoría", border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                
+                TextField(controller: preController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Precio", border: OutlineInputBorder(), prefixText: "\$ ")),
+                const SizedBox(height: 15),
+
+                // GESTIÓN DE IMÁGENES NUEVAS (Vista previa antes de subir)
+                if (imagenesNuevasAEspera.isNotEmpty)
+                  SizedBox(
+                    height: 80,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: imagenesNuevasAEspera.length,
+                      itemBuilder: (context, index) => Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        width: 70,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          image: DecorationImage(image: FileImage(File(imagenesNuevasAEspera[index].path)), fit: BoxFit.cover),
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                TextButton.icon(
+                  onPressed: () async {
+                    final List<XFile> picked = await ImagePicker().pickMultiImage();
+                    if (picked.isNotEmpty) {
+                      setModalState(() => imagenesNuevasAEspera = picked);
+                    }
+                  },
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  label: const Text("Añadir fotos nuevas"),
+                ),
+
+                const SizedBox(height: 20),
+
+                ElevatedButton(
+                  onPressed: estaCargando ? null : () async {
+                    setModalState(() => estaCargando = true);
+                    try {
+                      // 1. Actualizar datos básicos
+                      await ProductosService().actualizarProducto(
+                        id: producto['id'].toString(),
+                        nombre: nomController.text,
+                        precio: double.parse(preController.text),
+                        descripcion: descController.text,
+                        categoria: categoriaEdit!,
+                      );
+
+                      // 2. Si seleccionó fotos nuevas, subirlas
+                      if (imagenesNuevasAEspera.isNotEmpty) {
+                        await ProductosService().subirFotosAdicionales(
+                          producto['id'].toString(),
+                          producto['fk_negocio'].toString(),
+                          imagenesNuevasAEspera,
+                        );
+                      }
+
+                      if (context.mounted) Navigator.pop(context);
+                    } catch (e) {
+                      setModalState(() => estaCargando = false);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 50),
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: estaCargando 
+                    ? const CircularProgressIndicator(color: Colors.white) 
+                    : const Text("Actualizar Producto"),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
 
 void _confirmarEliminacion(dynamic id, String nombre) {
   showDialog(

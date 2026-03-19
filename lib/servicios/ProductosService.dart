@@ -1,10 +1,52 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
 class ProductosService {
   final _supabase = Supabase.instance.client;
 
+  Future<void> actualizarProducto({
+    required String id,
+    required String nombre,
+    required double precio,
+    required String descripcion,
+    required String categoria,
+  }) async {
+    await _supabase.from('productos').update({
+      'nombre': nombre,
+      'precio': precio,
+      'descripcion': descripcion,
+      'fk_categoria': categoria,
+    }).eq('id', id);
+  }
+
+  Future<void> subirFotosAdicionales(String productoId, String fkNegocio, List<XFile> nuevasImagenes) async {
+    List<Map<String, dynamic>> registrosNuevos = [];
+
+    for (int i = 0; i < nuevasImagenes.length; i++) {
+      final img = nuevasImagenes[i];
+      final bytes = await img.readAsBytes();
+      final String mimeType = img.mimeType ?? 'image/jpeg';
+      final String extension = mimeType.split('/').last;
+
+      // Nombre único usando timestamp para no sobrescribir las existentes
+      final String pathFinal = '$fkNegocio/$productoId/extra_${DateTime.now().millisecondsSinceEpoch}_$i.$extension';
+
+      await _supabase.storage.from('productos').uploadBinary(
+        pathFinal,
+        bytes,
+        fileOptions: FileOptions(contentType: mimeType, upsert: true),
+      );
+
+      final url = _supabase.storage.from('productos').getPublicUrl(pathFinal);
+      registrosNuevos.add({'fk_producto': productoId, 'url': url});
+    }
+
+    if (registrosNuevos.isNotEmpty) {
+      await _supabase.from('imagenes_producto').insert(registrosNuevos);
+    }
+  }
   Future<void> crearProductoAutomatico(
     BuildContext context,
     String nombre,
@@ -42,28 +84,33 @@ class ProductosService {
 
       final String productoId = nuevoProducto['id'].toString();
 
-      // 3. Subir imágenes con la estructura: negocio_id / producto_id / imagen_N
+      // 3. Subir imágenes
       List<Map<String, dynamic>> registrosImagenes = [];
 
       for (int i = 0; i < imagenes.length; i++) {
         final img = imagenes[i];
-        final bytes = await img.readAsBytes();
-        final extension = img.path.split('.').last.toLowerCase();
+        
+        // CAMBIO CRÍTICO: Leer bytes primero
+        final Uint8List bytes = await img.readAsBytes();
+        
+        // CAMBIO CRÍTICO: En Web, img.path no tiene extensión confiable. 
+        // Usamos mimeType o por defecto 'jpeg'
+        final String mimeType = img.mimeType ?? 'image/jpeg';
+        final String extension = mimeType.split('/').last;
         
         // ESTRUCTURA: Carpeta_Negocio / Carpeta_Producto / imagen_N.ext
-        // Usamos el ID del producto para que la carpeta sea única y no haya choques de nombres
         final String pathFinal = '$fkNegocio/$productoId/imagen_${i + 1}.$extension';
 
+        // CAMBIO CRÍTICO: Asegurar el Content-Type correcto en el upload
         await _supabase.storage.from('productos').uploadBinary(
           pathFinal,
           bytes,
           fileOptions: FileOptions(
-            contentType: 'image/$extension',
-            upsert: true, // Si por algún motivo ya existe, lo sobrescribe
+            contentType: mimeType, // Usar el mimeType detectado
+            upsert: true,
           ),
         );
 
-        // Obtener la URL pública de la imagen recién subida
         final url = _supabase.storage.from('productos').getPublicUrl(pathFinal);
         
         registrosImagenes.add({
@@ -72,12 +119,10 @@ class ProductosService {
         });
       }
 
-      // 4. Guardar las URLs en la tabla secundaria y actualizar la principal
+      // 4. Guardar las URLs
       if (registrosImagenes.isNotEmpty) {
-        // Insertar todas las imágenes en 'imagenes_producto'
         await _supabase.from('imagenes_producto').insert(registrosImagenes);
         
-        // Establecer la primera imagen como la principal del producto
         await _supabase.from('productos')
             .update({'imagen_url': registrosImagenes.first['url']})
             .eq('id', productoId);
