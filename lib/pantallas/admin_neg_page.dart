@@ -209,12 +209,59 @@ void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> pr
                 const Text("Editar Producto", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 15),
                 
+                // --- SECCIÓN: IMÁGENES ACTUALES EN LA DB ---
+                const Text("Imágenes actuales (Toca para eliminar)", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 8),
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _supabase.from('imagenes_producto').select().eq('fk_producto', producto['id']),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const LinearProgressIndicator();
+                    final fotosDB = snapshot.data!;
+                    if (fotosDB.isEmpty) return const Text("No hay imágenes guardadas");
+
+                    return SizedBox(
+                      height: 80,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: fotosDB.length,
+                        itemBuilder: (context, index) {
+                          final foto = fotosDB[index];
+                          return Stack(
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                width: 70,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  image: DecorationImage(image: NetworkImage(foto['url']), fit: BoxFit.cover),
+                                ),
+                              ),
+                              Positioned(
+                                top: 0, right: 5,
+                                child: GestureDetector(
+                                  onTap: () async {
+                                    // LLAMADA A ELIMINACIÓN
+                                    await ProductosService().eliminarImagenCompleto(foto['id'].toString(), foto['url']);
+                                    setModalState(() {}); // Refrescar minigalería
+                                  },
+                                  child: const CircleAvatar(radius: 10, backgroundColor: Colors.red, child: Icon(Icons.close, size: 12, color: Colors.white)),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+                
+                const Divider(height: 30),
+
+                // Formulario de textos
                 TextField(controller: nomController, decoration: const InputDecoration(labelText: "Nombre", border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                
                 TextField(controller: descController, maxLines: 2, decoration: const InputDecoration(labelText: "Descripción", border: OutlineInputBorder())),
                 const SizedBox(height: 10),
-                
                 DropdownButtonFormField<String>(
                   value: categoriaEdit,
                   items: categorias.map((cat) => DropdownMenuItem(value: cat['id'].toString(), child: Text(cat['nombre']))).toList(),
@@ -222,7 +269,6 @@ void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> pr
                   decoration: const InputDecoration(labelText: "Categoría", border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 10),
-                
                 TextField(controller: preController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Precio", border: OutlineInputBorder(), prefixText: "\$ ")),
                 const SizedBox(height: 15),
 
@@ -243,7 +289,7 @@ void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> pr
                       ),
                     ),
                   ),
-                  
+
                 TextButton.icon(
                   onPressed: () async {
                     final List<XFile> picked = await ImagePicker().pickMultiImage();
@@ -261,7 +307,6 @@ void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> pr
                   onPressed: estaCargando ? null : () async {
                     setModalState(() => estaCargando = true);
                     try {
-                      // 1. Actualizar datos básicos
                       await ProductosService().actualizarProducto(
                         id: producto['id'].toString(),
                         nombre: nomController.text,
@@ -270,7 +315,6 @@ void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> pr
                         categoria: categoriaEdit!,
                       );
 
-                      // 2. Si seleccionó fotos nuevas, subirlas
                       if (imagenesNuevasAEspera.isNotEmpty) {
                         await ProductosService().subirFotosAdicionales(
                           producto['id'].toString(),
@@ -290,9 +334,7 @@ void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> pr
                     backgroundColor: Colors.blueAccent,
                     foregroundColor: Colors.white,
                   ),
-                  child: estaCargando 
-                    ? const CircularProgressIndicator(color: Colors.white) 
-                    : const Text("Actualizar Producto"),
+                  child: estaCargando ? const CircularProgressIndicator(color: Colors.white) : const Text("Actualizar Producto"),
                 ),
                 const SizedBox(height: 20),
               ],

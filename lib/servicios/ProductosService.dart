@@ -21,6 +21,37 @@ class ProductosService {
     }).eq('id', id);
   }
 
+  Future<void> eliminarImagenCompleto(String imagenId, String url) async {
+    try {
+      // 1. Extraer el path relativo para el Storage
+      // La URL suele ser: .../storage/v1/object/public/productos/negocioID/productoID/imagen.jpg
+      // Necesitamos solo: negocioID/productoID/imagen.jpg
+      final Uri uri = Uri.parse(url);
+      final String pathEnStorage = uri.path.split('public/productos/').last;
+
+      // 2. Eliminar el archivo físico del Storage
+      final List<FileObject> response = await _supabase
+          .storage
+          .from('productos')
+          .remove([pathEnStorage]);
+
+      if (response.isEmpty) {
+        debugPrint("Advertencia: No se encontró el archivo físico en el Storage");
+      }
+
+      // 3. Eliminar el registro de la tabla imagenes_producto
+      await _supabase
+          .from('imagenes_producto')
+          .delete()
+          .eq('id', imagenId);
+
+      debugPrint("Imagen eliminada con éxito: $imagenId");
+    } catch (e) {
+      debugPrint("Error crítico al eliminar imagen: $e");
+      rethrow;
+    }
+  }
+
   Future<void> subirFotosAdicionales(String productoId, String fkNegocio, List<XFile> nuevasImagenes) async {
     List<Map<String, dynamic>> registrosNuevos = [];
 
