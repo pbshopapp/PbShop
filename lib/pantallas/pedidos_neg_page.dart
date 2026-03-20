@@ -46,20 +46,33 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
 
   // Función para actualizar el estado del pedido en Supabase
   Future<void> _actualizarEstado(String pedidoId, String nuevoEstado) async {
-    try {
-      await _supabase
-          .from('pedidos')
-          .update({'estado': nuevoEstado})
-          .eq('id', pedidoId);
-      
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Pedido actualizado a $nuevoEstado"))
-        );
-      }
-    } catch (e) {
-      debugPrint("Error actualizando estado: $e");
+  try {
+    // Agregamos .select() al final para que nos devuelva la fila actualizada
+    final data = await _supabase
+        .from('pedidos')
+        .update({'estado': nuevoEstado})
+        .eq('id', pedidoId)
+        .select(); // <--- IMPORTANTE
+
+    if (data.isEmpty) {
+      // Si data está vacío, significa que el RLS bloqueó el update o el ID no existe
+      _mostrarMensaje("Error: No tienes permisos para actualizar este pedido", Colors.orange);
+    } else {
+      _mostrarMensaje("Pedido actualizado a $nuevoEstado", Colors.green);
     }
+  } catch (e) {
+    _mostrarMensaje("Error de conexión: $e", Colors.red);
+  }
+}
+
+  void _mostrarMensaje(String mensaje, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: color,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -75,7 +88,7 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text("PANEL DE TENDEROS"),
+        title: const Text("PEDIDOS PENDIENTES"),
         backgroundColor: const Color.fromRGBO(0, 180, 195, 1), // Color turquesa de tu app
         foregroundColor: Colors.white,
         bottom: TabBar(
@@ -84,13 +97,13 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
           unselectedLabelColor: Colors.white70,
           indicatorSize: TabBarIndicatorSize.label,
           indicator: BoxDecoration(
-            borderRadius: BorderRadius.circular(50),
-            color: Colors.white
+            borderRadius: BorderRadius.circular(20),
+            color: const Color.fromARGB(255, 255, 255, 255)
           ),
           tabs: const [
-            Tab(text: "Pendientes"),
-            Tab(text: "En Preparación"),
-            Tab(text: "Listos"),
+            Tab(text: "        Pendientes        "),
+            Tab(text: "      En Preparación      "),
+            Tab(text: "          Listos          "),
           ],
         ),
       ),
@@ -98,7 +111,7 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
         controller: _tabController,
         children: [
           _buildListaPedidos("pendiente"),
-          _buildListaPedidos("en_preparacion"),
+          _buildListaPedidos("preparacion"),
           _buildListaPedidos("listo"),
         ],
       ),
@@ -143,7 +156,7 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
     // Lógica para determinar si es urgente (ej. más de 15 min esperando)
     DateTime fechaPedido = DateTime.parse(pedido['fecha']);
     Duration diferencia = DateTime.now().difference(fechaPedido);
-    bool esUrgent = diferencia.inMinutes > 15 && pedido['estado'] == 'pendiente';
+    bool esUrgent = diferencia.inMinutes > 20 && pedido['estado'] == 'pendiente';
     
     // Formatear la fecha/hora
     String horaFormateada = DateFormat('jm').format(fechaPedido.toLocal());
@@ -194,12 +207,56 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
                   children: [
                     const Icon(Icons.shopping_basket_outlined, color: Colors.grey),
                     const SizedBox(width: 10),
-                    const Text("Iconos de productos...", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
-                    const Spacer(),
+                    // FutureBuilder para traer los nombres/iconos de los productos
+                    Expanded(
+                      child: FutureBuilder<List<Map<String, dynamic>>>(
+                        // Query con JOIN: Trae la cantidad y el nombre del producto relacionado
+                        future: _supabase
+                            .from('detalles_pedido')
+                            .select('cantidad, productos(nombre)')
+                            .eq('fk_pedido', pedido['id']),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Text("Cargando...", style: TextStyle(fontSize: 12, color: Colors.grey));
+                          }
+                          
+                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const Text("Sin productos", style: TextStyle(fontSize: 12, color: Colors.grey));
+                          }
+
+                          final detalles = snapshot.data!;
+                          
+                          // Creamos una cadena de texto con los productos: "2x Pizza, 1x Coca-Cola"
+                          String resumen = detalles.map((d) {
+                            final nombre = d['productos']['nombre'];
+                            final cant = d['cantidad'];
+                            return "${cant}x $nombre";
+                          }).join(", ");
+
+                          return Text(
+                            resumen,
+                            overflow: TextOverflow.ellipsis, // Si son muchos, pone "..."
+                            style: const TextStyle(
+                              color: Colors.black87, 
+                              fontSize: 13, 
+                              fontWeight: FontWeight.w500
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Etiqueta del método de pago
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(5)),
-                      child: Text(pedido['metodo_pago'].toString().toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200], 
+                        borderRadius: BorderRadius.circular(5)
+                      ),
+                      child: Text(
+                        pedido['metodo_pago'].toString().toUpperCase(), 
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)
+                      ),
                     )
                   ],
                 ),
@@ -243,11 +300,11 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
     
     if (estado == "pendiente") {
       return ElevatedButton(
-        onPressed: () => _actualizarEstado(pedido['id'], "en_preparacion"),
+        onPressed: () => _actualizarEstado(pedido['id'], "preparacion"),
         style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[600], foregroundColor: Colors.black),
         child: const Text("Empezar a Preparar"),
       );
-    } else if (estado == "en_preparacion") {
+    } else if (estado == "preparacion") {
       return ElevatedButton(
         onPressed: () => _actualizarEstado(pedido['id'], "listo"),
         style: ElevatedButton.styleFrom(backgroundColor: const Color.fromRGBO(0, 180, 195, 1), foregroundColor: Colors.white),
@@ -256,34 +313,118 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
     } else {
       // Estado 'listo' u otros.
       return ElevatedButton(
-        onPressed: null, // Deshabilitado o acción para entregar
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
-        child: const Text("Listo para Recoger"),
+        onPressed: () => _actualizarEstado(pedido['id'], "entregado"),
+        style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 0, 153, 25), foregroundColor: Colors.white),
+        child: const Text("entregado"),
       );
     }
   }
 
   // Ejemplo simple de cómo mostrar detalles (puedes crear una página nueva)
   void _mostrarDetallesPedido(Map<String, dynamic> pedido) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          height: 300,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Detalles Pedido #${pedido['id'].toString().substring(0,5)}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              Text("Notas: ${pedido['notas'] ?? 'Sin notas.'}"),
-              const SizedBox(height: 20),
-              const Text("Aquí cargarías los productos usando 'detalles_pedido'...", style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
-              // Aquí harías un FutureBuilder a 'detalles_pedido' uniendo con 'productos'
-            ],
-          ),
-        );
-      },
-    );
-  }
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min, // Ajusta el alto al contenido
+          children: [
+            Text(
+              "Detalles Pedido #${pedido['id'].toString().substring(0, 5)}",
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text("Notas: ${pedido['notas'] ?? 'Sin notas.'}", 
+                 style: const TextStyle(color: Colors.grey)),
+            const Divider(height: 30),
+            
+            // Lista de productos
+            Flexible(
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                // Traemos cantidad, precio y datos del producto (nombre e imagen)
+                future: _supabase
+                    .from('detalles_pedido')
+                    .select('cantidad, precio_unitario, productos(nombre, imagen_url)')
+                    .eq('fk_pedido', pedido['id']),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(child: Text("No hay productos en este pedido."));
+                  }
+
+                  final productos = snapshot.data!;
+
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: productos.length,
+                    itemBuilder: (context, index) {
+                      final item = productos[index];
+                      final infoProd = item['productos'];
+                      
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: infoProd['imagen_url'] != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    infoProd['imagen_url'],
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => 
+                                      const Icon(Icons.fastfood),
+                                  ),
+                                )
+                              : const Icon(Icons.fastfood, color: Colors.grey),
+                        ),
+                        title: Text(
+                          "${infoProd['nombre']}",
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text("Cantidad: ${item['cantidad']}"),
+                        trailing: Text(
+                          "\$${(item['precio_unitario'] * item['cantidad']).toInt()}",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold, 
+                            color: Color.fromRGBO(0, 180, 195, 1)
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Botón para cerrar el modal
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey[200],
+                  foregroundColor: Colors.black87,
+                  elevation: 0,
+                ),
+                child: const Text("Cerrar"),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
 }

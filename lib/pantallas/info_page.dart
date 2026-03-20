@@ -95,6 +95,9 @@ class _InfoPageState extends State<info_page> {
             Icons.admin_panel_settings_outlined,
             const admin_neg_page(),
           ),
+
+          const SizedBox(height: 20),
+          
           _botonMenu(
             context,
             "Ver Pedidos",
