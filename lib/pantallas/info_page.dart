@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/documentation_page.dart';
 import 'package:pbshop/pantallas/help_page.dart';
 import 'package:pbshop/pantallas/login_page.dart';
+import 'package:pbshop/pantallas/pedidos_neg_page.dart';
 import 'package:pbshop/widgets/PanelPerfil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
@@ -93,6 +94,12 @@ class _InfoPageState extends State<info_page> {
             "Panel de Negocio",
             Icons.admin_panel_settings_outlined,
             const admin_neg_page(),
+          ),
+          _botonMenu(
+            context,
+            "Ver Pedidos",
+            Icons.shopping_cart_outlined,
+            const pedidos_neg_page(),
           ),
 
           const SizedBox(height: 20),

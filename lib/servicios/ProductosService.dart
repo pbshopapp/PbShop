@@ -2,10 +2,29 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
+import 'package:intl/intl.dart';
+
+
+extension FormatoMoneda on Object? {
+  String get fmoneda {
+    final format = NumberFormat.currency(
+      locale: 'es_CO',
+      symbol: '\$',
+      decimalDigits: 0,
+    );
+
+    if (this is num) {
+      return format.format(this);
+    } else if (this is String) {
+      final numero = double.tryParse(this as String) ?? 0;
+      return format.format(numero);
+    }
+    return "\$ 0";
+  }
+}
 
 class ProductosService {
   final _supabase = Supabase.instance.client;
-
   Future<void> actualizarProducto({
     required String id,
     required String nombre,

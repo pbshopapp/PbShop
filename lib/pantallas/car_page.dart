@@ -27,11 +27,11 @@ class _car_pageState extends State<car_page> {
     try {
       // 1. Insertar Cabecera (Tabla pedidos)
       final pedido = await Supabase.instance.client.from('pedidos').insert({
-        'fk_usuario': user.id,
+        'id_usuario': user.id,
         'fk_negocio': _cartService.items.first.fkNegocio,
         'total': _cartService.granTotal,
         'estado': 'pendiente',
-        'metodo_pago': 'Efectivo',
+        'metodo_pago': 'efectivo',
       }).select().single();
 
       // 2. Insertar Detalles (Tabla detalles_pedido)
