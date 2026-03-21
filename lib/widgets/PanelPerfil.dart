@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pbshop/servicios/ObtenerDatosUser.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PerfilWidget extends StatefulWidget {
   final String nombre;
@@ -22,15 +23,47 @@ class PerfilWidget extends StatefulWidget {
 class _PerfilWidgetState extends State<PerfilWidget> {
   // Estados para visibilidad
   bool _verTelefono = false;
-  bool _verContrasena = false;
   final _datosService = ObtenerDatosUser();
+  String _nombreLocal = 'No ha iniciado sesión';
+  String _telefonoLocal = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreLocal = widget.nombre;
+    _telefonoLocal = widget.telefono;
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (mounted) { // Verifica que el widget siga en pantalla
+        setState(() {
+          // Esto refresca la UI automáticamente en cualquier cambio de sesión
+        });
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant PerfilWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.nombre != widget.nombre || oldWidget.telefono != widget.telefono) {
+      setState(() {
+        _nombreLocal = widget.nombre;
+        _telefonoLocal = widget.telefono;
+      });
+    }
+  }
 
   void _guardarCambio(String columna, String valor) async {
     bool exito = await _datosService.actualizarCampoPerfil(columna, valor);
     
     if (exito) {
+      // 3. Actualizamos la variable local según lo que se cambió
+      setState(() {
+        if (columna == 'nombre') _nombreLocal = valor;
+        if (columna == 'telefono') _telefonoLocal = valor;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("$columna actualizado con éxito")),
+        SnackBar(content: Text("${columna[0].toUpperCase()}${columna.substring(1)} actualizado")),
       );
       setState(() {});
     } else {
@@ -149,6 +182,8 @@ class _PerfilWidgetState extends State<PerfilWidget> {
   
   @override
   Widget build(BuildContext context) {
+    final nombreAMostrar = _nombreLocal.isEmpty ? widget.nombre : _nombreLocal;
+    final telefonoAMostrar = _telefonoLocal.isEmpty ? widget.telefono : _telefonoLocal;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -188,18 +223,18 @@ class _PerfilWidgetState extends State<PerfilWidget> {
                     children: [
                       _datoConBoton(
                         "Nombre", 
-                        widget.nombre, 
+                        _nombreLocal,
                         Icons.person,
                         () => _mostrarDialogoEdicion("Nombre", widget.nombre, (nuevo) => _guardarCambio("nombre", nuevo)),
                       ),
                       const Divider(),
                       _datoConBoton(
                         "Teléfono", 
-                        _verTelefono ? widget.telefono : "********", 
+                        _verTelefono ? _telefonoLocal : "********", 
                         _verTelefono ? Icons.visibility_off : Icons.visibility,
                         () => setState(() => _verTelefono = !_verTelefono),
                         isToggle: true,
-                        onEdit: () => _mostrarDialogoEdicion("Teléfono", widget.telefono, (nuevo) => _guardarCambio("telefono", nuevo)),
+                        onEdit: () => _mostrarDialogoEdicion("Teléfono", _telefonoLocal, (nuevo) => _guardarCambio("telefono", nuevo)),
                         
                       ),
                       const Divider(),

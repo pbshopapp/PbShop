@@ -21,13 +21,14 @@ class _InfoPageState extends State<info_page> {
   String contrasena = "********";
   String avatarUrl = "https://via.placeholder.com/150"; // valor por defecto
 
-  @override
-  void initState() {
-    super.initState();
-    _cargarDatos();
-  }
+@override
+void initState() {
+  super.initState();
+  _cargarDatos(); // Cargamos los datos por primera vez
+}
 
-  Future<void> _cargarDatos() async {
+// Creamos un método para (re)cargar los datos
+Future<void> _cargarDatos() async {
   final obtenerDatosUser = ObtenerDatosUser();
   final perfil = await obtenerDatosUser.getDatosUsuario();
 
@@ -151,6 +152,7 @@ class _InfoPageState extends State<info_page> {
     return OutlinedButton.icon(
       onPressed: () async {
         await Supabase.instance.client.auth.signOut();
+        _cargarDatos(); // Limpiamos los datos al cerrar sesión
         setState(() {}); // Forzar actualización de UI después de cerrar sesión
       },
       style: OutlinedButton.styleFrom(

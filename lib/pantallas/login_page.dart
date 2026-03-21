@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pbshop/main.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/pantallas/inicio_content.dart';
+import 'package:pbshop/servicios/ObtenerDatosUser.dart';
 
 class login_page extends StatefulWidget {
   const login_page({super.key});
@@ -48,8 +50,13 @@ class _LoginPageState extends State<login_page> {
         if (mounted) {
           if (perfil != null && perfil['rol'] == 'admin_negocio') {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const admin_neg_page()));
+             // Cargamos los datos del nuevo usuario para mostrar su perfil actualizado en info_page
           } else {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InicioContent()));
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const PBShopApp()), // Aquí pones el nombre de tu clase
+              (route) => false, // Esto borra el historial para que no puedan volver al Login
+            );
           }
         }
       }
