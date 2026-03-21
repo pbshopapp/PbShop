@@ -131,7 +131,9 @@ class _InfoPageState extends State<info_page> {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const login_page()),
+          
         );
+        setState(() {});
       },
       style: ElevatedButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -149,6 +151,7 @@ class _InfoPageState extends State<info_page> {
     return OutlinedButton.icon(
       onPressed: () async {
         await Supabase.instance.client.auth.signOut();
+        setState(() {}); // Forzar actualización de UI después de cerrar sesión
       },
       style: OutlinedButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

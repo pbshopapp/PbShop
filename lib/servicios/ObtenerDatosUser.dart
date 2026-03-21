@@ -19,6 +19,21 @@ class ObtenerDatosUser {
       return false;
     }
   }
+
+  /// Cambia la contraseña real de la cuenta en Supabase Auth
+  Future<bool> cambiarContrasenaAuth(String nuevaPassword) async {
+    try {
+      // Esta es la instrucción que cambia la clave en el sistema de login
+      await _client.auth.updateUser(
+        UserAttributes(password: nuevaPassword),
+      );
+      return true;
+    } catch (e) {
+      print("Error de Auth: $e");
+      return false;
+    }
+  }
+
   /// Obtiene los datos del usuario desde la tabla `profiles`
   Future<UserProfile> getDatosUsuario() async {
     final user = _client.auth.currentUser;
@@ -35,7 +50,7 @@ class ObtenerDatosUser {
     try {
       final response = await _client
           .from('perfiles')
-          .select('nombre, telefono, password, avatar_url')
+          .select('nombre, telefono, avatar_url')
           .eq('id', user.id)
           .single();
 

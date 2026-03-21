@@ -27,8 +27,6 @@ class _product_pageState extends State<product_page> {
           .eq('fk_producto', productoId)
           .timeout(const Duration(seconds: 4));
 
-      if (response == null) return [];
-      
       final listaUrls = (response as List).map((item) => item['url'].toString()).toList();
       
       // Si no hay fotos adicionales, metemos la foto principal al menos para que el widget no esté vacío

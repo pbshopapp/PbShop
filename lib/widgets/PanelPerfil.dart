@@ -32,13 +32,95 @@ class _PerfilWidgetState extends State<PerfilWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("$columna actualizado con éxito")),
       );
-      // Aquí podrías disparar un setState o un callback para refrescar la UI
+      setState(() {});
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Error al actualizar los datos")),
       );
     }
   }
+
+  void _mostrarDialogoCambioPassword() {
+    // Necesitamos dos controladores, uno para cada campo
+    TextEditingController pass1Controller = TextEditingController();
+    TextEditingController pass2Controller = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("Cambiar Contraseña"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: pass1Controller,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: "Nueva Contraseña",
+                  hintText: "Mínimo 6 caracteres",
+                ),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: pass2Controller,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: "Confirmar Contraseña",
+                  hintText: "Repite la contraseña",
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancelar"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                String p1 = pass1Controller.text.trim();
+                String p2 = pass2Controller.text.trim();
+
+                // 1. Validación de coincidencia
+                if (p1 != p2) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Las contraseñas no coinciden")),
+                  );
+                  return;
+                }
+
+                // 2. Validación de longitud
+                if (p1.length < 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Debe tener al menos 6 caracteres")),
+                  );
+                  return;
+                }
+
+                // 3. Ejecución del cambio
+                bool exito = await _datosService.cambiarContrasenaAuth(p1);
+                
+                if (exito) {
+                  Navigator.pop(context); // Cerramos el diálogo solo si hubo éxito
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Contraseña cambiada exitosamente")),
+                  );
+                }
+              },
+              child: const Text("Guardar"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // Función para mostrar un diálogo de edición
   void _mostrarDialogoEdicion(String titulo, String valorActual, Function(String) onGuardar) {
     TextEditingController controller = TextEditingController(text: valorActual);
@@ -118,15 +200,14 @@ class _PerfilWidgetState extends State<PerfilWidget> {
                         () => setState(() => _verTelefono = !_verTelefono),
                         isToggle: true,
                         onEdit: () => _mostrarDialogoEdicion("Teléfono", widget.telefono, (nuevo) => _guardarCambio("telefono", nuevo)),
+                        
                       ),
                       const Divider(),
                       _datoConBoton(
                         "Contraseña", 
-                        _verContrasena ? widget.contrasena : "********", 
-                        _verContrasena ? Icons.visibility_off : Icons.visibility,
-                        () => setState(() => _verContrasena = !_verContrasena),
-                        isToggle: true,
-                        onEdit: () => _mostrarDialogoEdicion("Contraseña", widget.contrasena, (nuevo) => _guardarCambio("contrasena", nuevo)),
+                        "********", 
+                        Icons.lock_outline, 
+                        () => _mostrarDialogoCambioPassword(), // Llamamos a la nueva función de doble campo
                       ),
                     ],
                   ),

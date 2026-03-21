@@ -16,7 +16,6 @@ class CartaProducto extends StatelessWidget {
           .select('url')
           .eq('fk_producto', producto['id']);
 
-      if (response == null) return [];
       return (response as List).map((item) => item['url'] as String).toList();
     } catch (e) {
       return [];
