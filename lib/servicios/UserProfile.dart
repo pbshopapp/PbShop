@@ -14,8 +14,8 @@ class UserProfile {
   // Constructor desde un Map (respuesta de Supabase)
   factory UserProfile.fromMap(Map<String, dynamic> map) {
     return UserProfile(
-      name: map['name'] ?? "Usuario sin nombre",
-      phone: map['phone'] ?? "Teléfono no registrado",
+      name: map['nombre'] ?? "Usuario sin nombre",
+      phone: map['telefono'] ?? "Teléfono no registrado",
       password: map['password'] ?? "********",
       avatarUrl: map['avatar_url'] ?? "https://via.placeholder.com/150",
     );

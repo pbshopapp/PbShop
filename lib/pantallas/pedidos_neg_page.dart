@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart'; // Para formatear fechas (agrega a pubspec.yaml)
+import 'package:intl/intl.dart';
+import 'package:pbshop/servicios/PedidoService.dart';
 
 class pedidos_neg_page extends StatefulWidget {
   const pedidos_neg_page({super.key});
@@ -10,8 +11,13 @@ class pedidos_neg_page extends StatefulWidget {
 }
 
 class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTickerProviderStateMixin {
+  bool _estaBuscando = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _textoBusqueda = "";
   final _supabase = Supabase.instance.client;
   late TabController _tabController;
+  final _pedidoService = PedidoService();
+
   String? _idNegocio;
   bool _cargando = true;
 
@@ -59,6 +65,13 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
       _mostrarMensaje("Error: No tienes permisos para actualizar este pedido", Colors.orange);
     } else {
       _mostrarMensaje("Pedido actualizado a $nuevoEstado", Colors.green);
+      if (mounted) {
+      setState(() {
+        // No necesitas cambiar ninguna variable, solo disparar el redibujado
+      });
+      
+      _mostrarMensaje("Pedido movido a $nuevoEstado", Colors.green);
+    }
     }
   } catch (e) {
     _mostrarMensaje("Error de conexión: $e", Colors.red);
@@ -76,39 +89,80 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (_cargando) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+Widget build(BuildContext context) {
+  if (_cargando) {
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+  }
 
-    if (_idNegocio == null) {
-      return const Scaffold(body: Center(child: Text("No tienes un negocio vinculado a tu perfil.")));
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
+  return Scaffold(
+    backgroundColor: Colors.grey[100], // Fondo gris claro para que las tarjetas blancas resalten
       appBar: AppBar(
-        title: const Text("PEDIDOS PENDIENTES"),
-        backgroundColor: const Color.fromRGBO(0, 180, 195, 1), // Color turquesa de tu app
+        title: _estaBuscando 
+          ? TextField(
+              controller: _searchController,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: "Buscar pedido o cliente...",
+                hintStyle: TextStyle(color: Colors.white70),
+                border: InputBorder.none,
+              ),
+              onChanged: (val) {
+                setState(() => _textoBusqueda = val.toLowerCase());
+              },
+            )
+          : const Text("PEDIDOS PENDIENTES", style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
         foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.black,
-          unselectedLabelColor: Colors.white70,
-          indicatorSize: TabBarIndicatorSize.label,
-          indicator: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: const Color.fromARGB(255, 255, 255, 255)
+        actions: [
+          IconButton(
+            icon: Icon(_estaBuscando ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                _estaBuscando = !_estaBuscando;
+                if (!_estaBuscando) {
+                  _searchController.clear();
+                  _textoBusqueda = "";
+                }
+              });
+            },
           ),
-          tabs: const [
-            Tab(text: "        Pendientes        "),
-            Tab(text: "      En Preparación      "),
-            Tab(text: "          Listos          "),
-          ],
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
+            child: Container(
+              height: 45,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: const Color.fromRGBO(0, 180, 195, 1),
+                unselectedLabelColor: Colors.white,
+                indicator: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white,
+                ),
+                tabs: const [
+                  Tab(text: "Pendientes"),
+                  Tab(text: "En Proceso"),
+                  Tab(text: "Listos"),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
+      // El TabBarView debe tener el mismo controlador que el TabBar
       body: TabBarView(
         controller: _tabController,
+        physics: const BouncingScrollPhysics(), // Da ese efecto elástico de iOS al llegar al final
         children: [
           _buildListaPedidos("pendiente"),
           _buildListaPedidos("preparacion"),
@@ -119,34 +173,45 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
   }
 
   Widget _buildListaPedidos(String estadoFiltro) {
-    // STREAM EN TIEMPO REAL: Escucha cambios en la tabla pedidos para el negocio actual
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _supabase
           .from('pedidos')
           .stream(primaryKey: ['id'])
           .eq('fk_negocio', _idNegocio!)
-          .order('fecha', ascending: true), // Los más antiguos primero (urgentes)
+          .order('fecha', ascending: true),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text("No hay pedidos en estado: $estadoFiltro"));
+          return _buildEstadoVacio("No hay pedidos");
         }
 
-        // Filtramos localmente por el estado de la pestaña
-        final pedidos = snapshot.data!.where((p) => p['estado'] == estadoFiltro).toList();
+        // FILTRO MULTIPLE: Por estado Y por texto de búsqueda
+        final pedidosFiltrados = snapshot.data!.where((pedido) {
+          final coincideEstado = pedido['estado'].toString().toLowerCase() == estadoFiltro;
+          
+          // Si no hay texto en el buscador, solo filtramos por estado
+          if (_textoBusqueda.isEmpty) return coincideEstado;
 
-        if (pedidos.isEmpty) {
-          return Center(child: Text("No hay pedidos ${estadoFiltro.replaceAll('_', ' ')}"));
+          // Si hay texto, buscamos en el ID del pedido o el nombre (si lo tienes en el map)
+          final idPedido = pedido['id'].toString().toLowerCase();
+          // Nota: Para buscar por nombre de cliente, el pedido debería traer el nombre del perfil
+          // Si no lo trae, el ID es lo más seguro por ahora.
+          final coincideBusqueda = idPedido.contains(_textoBusqueda);
+
+          return coincideEstado && coincideBusqueda;
+        }).toList();
+
+        if (pedidosFiltrados.isEmpty) {
+          return _buildEstadoVacio("No se encontraron resultados");
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(10),
-          itemCount: pedidos.length,
-          itemBuilder: (context, index) {
-            return _buildCardPedido(pedidos[index]);
-          },
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+          itemCount: pedidosFiltrados.length,
+          itemBuilder: (context, index) => _buildCardPedido(pedidosFiltrados[index]),
         );
       },
     );
@@ -197,7 +262,27 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
                 ),
                 const SizedBox(height: 5),
                 // Aquí podrías hacer otro FutureBuilder para obtener el nombre del cliente desde 'perfiles'
-                const Text("Cliente: Ver Detalles", style: TextStyle(color: Colors.grey)),
+                FutureBuilder<String>(
+                  future: _pedidoService.obtenerNombreCliente(pedido['id_usuario']),
+                  builder: (context, snapshot) {
+                    // Mientras carga, mostramos un texto gris o un pequeño indicador
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Text("Cargando cliente...", 
+                          style: TextStyle(color: Colors.grey, fontSize: 13));
+                    }
+
+                    // Si hay datos, mostramos el nombre real del cliente
+                    final nombre = snapshot.data ?? "Cliente desconocido";
+                    return Text(
+                      "Cliente: $nombre",
+                      style: const TextStyle(
+                        color: Colors.black54, 
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14
+                      ),
+                    );
+                  },
+                ),
                 const SizedBox(height: 10),
                 const Divider(),
                 const SizedBox(height: 10),
@@ -294,6 +379,43 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
     );
   }
 
+  Widget _buildEstadoVacio(String mensaje) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Un icono grande y suave para indicar vacío
+            Icon(
+              Icons.assignment_turned_in_outlined, 
+              size: 80, 
+              color: Colors.grey[300]
+            ),
+            const SizedBox(height: 15),
+            Text(
+              mensaje,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[500],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Cuando lleguen nuevos pedidos aparecerán aquí automáticamente.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[400],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   // Define qué botón mostrar según el estado actual
   Widget _buildBotonAccionPrincipal(Map<String, dynamic> pedido) {
     String estado = pedido['estado'];
