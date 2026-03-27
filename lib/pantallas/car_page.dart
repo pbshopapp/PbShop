@@ -27,28 +27,44 @@ class _car_pageState extends State<car_page> {
     setState(() => _isConfirming = true);
 
     try {
-      // 1. Insertar Cabecera (Tabla pedidos)
-      final pedido = await Supabase.instance.client.from('pedidos').insert({
-        'id_usuario': user.id,
-        'fk_negocio': _cartService.items.first.fkNegocio,
-        'total': _cartService.granTotal,
-        'estado': 'pendiente',
-        'metodo_pago': 'efectivo',
-      }).select().single();
+      // 1. AGRUPAR productos por negocio (fk_negocio)
+      final Map<String, List<ItemCarrito>> productosPorNegocio = {};
+      for (var item in _cartService.items) {
+        productosPorNegocio.putIfAbsent(item.fkNegocio, () => []).add(item);
+      }
 
-      // 2. Insertar Detalles (Tabla detalles_pedido)
-      final detalles = _cartService.items.map((item) => {
-        'fk_pedido': pedido['id'],
-        'fk_producto': item.id,
-        'cantidad': item.cantidad,
-        'precio_unitario': item.precioUnitario,
-      }).toList();
+      // 2. ITERAR sobre cada grupo para crear un pedido por cada tienda
+      for (var entry in productosPorNegocio.entries) {
+        final String idNegocio = entry.key;
+        final List<ItemCarrito> itemsDeEsteNegocio = entry.value;
 
-      await Supabase.instance.client.from('detalles_pedido').insert(detalles);
+        // Calcular el total solo para este negocio
+        double totalNegocio = itemsDeEsteNegocio.fold(0, (sum, item) => sum + item.total);
 
-      // 3. Éxito: Limpiar y Notificar
+        // A. Insertar Cabecera para ESTE negocio
+        final pedido = await Supabase.instance.client.from('pedidos').insert({
+          'id_usuario': user.id,
+          'fk_negocio': idNegocio,
+          'total': totalNegocio,
+          'estado': 'pendiente',
+          'metodo_pago': 'efectivo',
+        }).select().single();
+
+        // B. Preparar Detalles para este pedido específico
+        final detalles = itemsDeEsteNegocio.map((item) => {
+          'fk_pedido': pedido['id'],
+          'fk_producto': item.id,
+          'cantidad': item.cantidad,
+          'precio_unitario': item.precioUnitario,
+        }).toList();
+
+        // C. Insertar Detalles
+        await Supabase.instance.client.from('detalles_pedido').insert(detalles);
+      }
+
+      // 3. Éxito Total
       _cartService.limpiarCarrito();
-      _mostrarMensaje("¡Pedido enviado con éxito!", Colors.green);
+      _mostrarMensaje("¡Pedidos enviados con éxito a cada tienda!", Colors.green);
       
     } catch (e) {
       _mostrarMensaje("Error al procesar: $e", Colors.red);
@@ -100,17 +116,38 @@ class _car_pageState extends State<car_page> {
   // --- WIDGETS RESTAURADOS ---
 
   Widget _buildPanelSuperiorRestaurado() {
+    final user = Supabase.instance.client.auth.currentUser;
+
+    // Si no hay usuario, mostramos un panel simple o vacío en lugar de activar el Stream
+    if (user == null) {
+      return const SizedBox.shrink(); // O un banner que diga "Inicia sesión para ver tus pedidos"
+    }
+
     return StreamBuilder<Map<String, dynamic>?>(
       stream: PedidoService().getUltimoPedidoStream(),
       builder: (context, snapshot) {
-        final estado = snapshot.data?['estado']?.toString().toLowerCase() ?? 'ninguno';
+        if (snapshot.hasError) {
+          return const ListTile(title: Text("Error al cargar pedidos"));
+        }
         
-        // Lógica de colores y textos para el dashboard
+      // 2. Extraer el estado con un valor por defecto seguro
+        final data = snapshot.data;
+
+        // Este bloque es vital para evitar el error de "null value"
+        final estado = (data != null && data.containsKey('estado') && data['estado'] != null) 
+            ? data['estado'].toString().toLowerCase() 
+            : 'ninguno';
+
+        // Ahora tu lógica de colores ya no fallará porque 'estado' siempre será un String
         Color colorEstado = const Color.fromRGBO(0, 180, 195, 1);
         String mensaje = "No tienes pedidos recientes";
         IconData icono = Icons.shopping_cart_outlined;
 
-        if (estado == 'preparacion') {
+        if(estado == 'pendiente') {
+          mensaje = "⏳ Tu pedido está pendiente";
+          colorEstado = Colors.orange;
+          icono = Icons.hourglass_empty;
+        } else if (estado == 'preparacion') {
           mensaje = "👨‍🍳 ¡Tu pedido está siendo preparado!";
           colorEstado = Colors.blue;
           icono = Icons.restaurant;
