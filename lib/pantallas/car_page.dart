@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/CartService.dart';
+import 'package:pbshop/pantallas/mis_pedidos_page.dart';
 
 class car_page extends StatefulWidget {
   const car_page({super.key});
@@ -114,7 +115,7 @@ class _car_pageState extends State<car_page> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color.fromRGBO(0, 180, 195, 1))),
                 if (_pedidosActivos > 2)
                   TextButton(
-                    onPressed: () { /* Lógica para ver todos */ }, 
+                    onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const MisPedidosPage())); }, 
                     style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 30)),
                     child: const Text("Ver todos los pedidos actuales", style: TextStyle(fontSize: 12)),
                   ),
