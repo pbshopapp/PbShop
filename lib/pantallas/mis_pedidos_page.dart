@@ -27,54 +27,60 @@ class _MisPedidosPageState extends State<MisPedidosPage> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: supabase
-            .from('pedidos')
-            .stream(primaryKey: ['id'])
-            .eq('id_usuario', supabase.auth.currentUser!.id.trim())
-            .order('fecha', ascending: false),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+        body: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: supabase
+              .from('pedidos')
+              .stream(primaryKey: ['id'])
+              .eq('id_usuario', supabase.auth.currentUser!.id.trim())
+              .order('fecha', ascending: false),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text("No tienes pedidos registrados"));
-          }
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return const Center(child: Text("No tienes pedidos registrados"));
+            }
 
-          final todosLosPedidos = snapshot.data!;
-          
-          final activos = todosLosPedidos.where((p) => 
-            p['estado']?.toString().toLowerCase() != 'entregado'
-          ).toList();
+            final todosLosPedidos = snapshot.data!;
+            
+            // PASO 3: Filtrado lógico para mover cancelados al historial
+            final activos = todosLosPedidos.where((p) {
+              final est = p['estado']?.toString().toLowerCase();
+              return est != 'entregado' && est != 'cancelado';
+            }).toList();
 
-          final historial = todosLosPedidos.where((p) => 
-            p['estado']?.toString().toLowerCase() == 'entregado'
-          ).toList();
+            final historial = todosLosPedidos.where((p) {
+              final est = p['estado']?.toString().toLowerCase();
+              return est == 'entregado' || est == 'cancelado';
+            }).toList();
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (activos.isNotEmpty) ...[
-                const _EtiquetaSeccion(texto: "PEDIDOS ACTIVOS"),
-                ...activos.map((p) => _TarjetaPedidoCalcada(pedido: p, esActivo: true)),
-                const SizedBox(height: 25),
-              ],
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (activos.isNotEmpty) ...[
+                  const _EtiquetaSeccion(texto: "PEDIDOS ACTIVOS"),
+                  ...activos.map((p) => _TarjetaPedidoCalcada(pedido: p, esActivo: true)),
+                  const SizedBox(height: 25),
+                ],
 
-              if (historial.isNotEmpty) ...[
-                const _EtiquetaSeccion(texto: "HISTORIAL"),
-                
-                ...historial
-                    .take(_mostrarTodoElHistorial ? historial.length : 3)
-                    .map((p) => _TarjetaPedidoCalcada(pedido: p, esActivo: false)),
+                if (historial.isNotEmpty) ...[
+                  const _EtiquetaSeccion(texto: "HISTORIAL"),
+                  
+                  ...historial
+                      .take(_mostrarTodoElHistorial ? historial.length : 3)
+                      .map((p) => _TarjetaPedidoCalcada(pedido: p, esActivo: false)),
 
-                if (historial.length > 3)
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () => setState(() => _mostrarTodoElHistorial = !_mostrarTodoElHistorial),
-                      icon: Icon(_mostrarTodoElHistorial ? Icons.keyboard_arrow_up : Icons.history, size: 18),
-                      label: Text(_mostrarTodoElHistorial ? "Ver menos" : "Ver todo el historial"),
-                      style: TextButton.styleFrom(foregroundColor: colorTurquesa, textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  if (historial.length > 3)
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => _mostrarTodoElHistorial = !_mostrarTodoElHistorial),
+                        icon: Icon(_mostrarTodoElHistorial ? Icons.keyboard_arrow_up : Icons.history, size: 18),
+                        label: Text(_mostrarTodoElHistorial ? "Ver menos" : "Ver todo el historial"),
+                        style: TextButton.styleFrom(
+                          foregroundColor: colorTurquesa, 
+                          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)
+                          ),
                     ),
                   ),
               ],
@@ -99,16 +105,16 @@ class _EtiquetaSeccion extends StatelessWidget {
   }
 }
 
-// --- ESTA ES LA TARJETA QUE CALCA EL DISEÑO VISUAL ---
+// --- TARJETA ACTUALIZADA CON SOPORTE PARA CANCELADOS ---
 class _TarjetaPedidoCalcada extends StatelessWidget {
   final Map<String, dynamic> pedido;
   final bool esActivo;
 
   const _TarjetaPedidoCalcada({required this.pedido, required this.esActivo});
 
-  // Lógica de colores basada en tu base de datos (imagen 4)
   Color _obtenerColorPorEstado(String estado) {
     switch (estado.toLowerCase()) {
+      case 'cancelado': return Colors.red; // <--- Nuevo: Color rojo para cancelados
       case 'pendiente': return Colors.orange;
       case 'preparando': 
       case 'preparacion': return Colors.blue;
@@ -121,6 +127,7 @@ class _TarjetaPedidoCalcada extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final estado = pedido['estado']?.toString() ?? 'Pendiente';
+    final esCancelado = estado.toLowerCase() == 'cancelado'; // Detectamos si está cancelado
     final color = _obtenerColorPorEstado(estado);
     const colorTurquesa = Color.fromRGBO(0, 180, 195, 1);
 
@@ -129,7 +136,6 @@ class _TarjetaPedidoCalcada extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        // Sombra suave como en el boceto
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Material(
@@ -146,38 +152,57 @@ class _TarjetaPedidoCalcada extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                // 1. Icono del Estado (Columna izquierda)
+                // 1. Icono dinámico (Paso 2 realizado aquí)
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-                  child: Icon(esActivo ? Icons.shopping_bag : Icons.check_circle, color: color, size: 26),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1), 
+                    shape: BoxShape.circle
+                  ),
+                  child: Icon(
+                    // Si es cancelado ponemos la X, si no, lo que ya tenías
+                    esCancelado 
+                        ? Icons.close 
+                        : (esActivo ? Icons.shopping_bag : Icons.check_circle), 
+                    color: color, 
+                    size: 26
+                  ),
                 ),
                 const SizedBox(width: 20),
                 
-                // 2. Información Central (Columna principal)
+                // 2. Información Central
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ID del pedido en negrita
-                      Text("Pedido #${pedido['id'].toString().substring(0, 5)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 6),
-                      
-                      // Chip de estado como en el boceto
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                        child: Text(estado.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+                      Text(
+                        "Pedido #${pedido['id'].toString().substring(0, 5)}", 
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
                       ),
                       const SizedBox(height: 6),
                       
-                      // Total en el turquesa de PB-Shop
-                      Text("\$${pedido['total']} COP", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorTurquesa)),
+                      // Chip de estado
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.1), 
+                          borderRadius: BorderRadius.circular(20)
+                        ),
+                        child: Text(
+                          estado.toUpperCase(), 
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      
+                      Text(
+                        "\$${pedido['total']} COP", 
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorTurquesa)
+                      ),
                     ],
                   ),
                 ),
                 
-                // 3. Flecha de navegación (Columna derecha)
                 const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
               ],
             ),

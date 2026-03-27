@@ -50,6 +50,31 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
     }
   }
 
+  // Función para confirmar y ejecutar la cancelación
+  void _confirmarCancelacion(String pedidoId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("¿Cancelar pedido?"),
+        content: const Text("Esta acción le avisará al estudiante que su pedido no puede ser procesado."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("VOLVER"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _actualizarEstado(pedidoId, "cancelado");
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("SÍ, CANCELAR", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Función para actualizar el estado del pedido en Supabase
   Future<void> _actualizarEstado(String pedidoId, String nuevoEstado) async {
   try {
@@ -218,166 +243,147 @@ Widget build(BuildContext context) {
   }
 
   Widget _buildCardPedido(Map<String, dynamic> pedido) {
-    // Lógica para determinar si es urgente (ej. más de 15 min esperando)
-    DateTime fechaPedido = DateTime.parse(pedido['fecha']);
-    Duration diferencia = DateTime.now().difference(fechaPedido);
-    bool esUrgent = diferencia.inMinutes > 20 && pedido['estado'] == 'pendiente';
-    
-    // Formatear la fecha/hora
-    String horaFormateada = DateFormat('jm').format(fechaPedido.toLocal());
+  // Lógica para determinar si es urgente (ej. más de 20 min esperando en pendiente)
+  DateTime fechaPedido = DateTime.parse(pedido['fecha']);
+  Duration diferencia = DateTime.now().difference(fechaPedido);
+  bool esUrgent = diferencia.inMinutes > 20 && pedido['estado'] == 'pendiente';
+  
+  // Formatear la fecha/hora
+  String horaFormateada = DateFormat('jm').format(fechaPedido.toLocal());
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 15),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Column(
-        children: [
-          // Franja superior de urgencia
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-            decoration: BoxDecoration(
-              color: esUrgent ? Colors.red[400] : Colors.amber[400],
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(esUrgent ? "URGENTE" : "NORMAL", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                Text("Hace ${diferencia.inMinutes} min ($horaFormateada)", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-              ],
-            ),
+  return Card(
+    margin: const EdgeInsets.only(bottom: 15),
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    child: Column(
+      children: [
+        // Franja superior de urgencia
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+          decoration: BoxDecoration(
+            color: esUrgent ? Colors.red[400] : Colors.amber[400],
+            borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
           ),
-          
-          Padding(
-            padding: const EdgeInsets.all(15),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text("Pedido #${pedido['id'].toString().substring(0, 5)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    Text("\$${(pedido['total'] as num).toInt()}", style: const TextStyle(fontSize: 18, color: Color.fromRGBO(0, 180, 195, 1), fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                // Aquí podrías hacer otro FutureBuilder para obtener el nombre del cliente desde 'perfiles'
-                FutureBuilder<String>(
-                  future: _pedidoService.obtenerNombreCliente(pedido['id_usuario']),
-                  builder: (context, snapshot) {
-                    // Mientras carga, mostramos un texto gris o un pequeño indicador
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Text("Cargando cliente...", 
-                          style: TextStyle(color: Colors.grey, fontSize: 13));
-                    }
-
-                    // Si hay datos, mostramos el nombre real del cliente
-                    final nombre = snapshot.data ?? "Cliente desconocido";
-                    return Text(
-                      "Cliente: $nombre",
-                      style: const TextStyle(
-                        color: Colors.black54, 
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-                const Divider(),
-                const SizedBox(height: 10),
-                
-                // Sección de iconos de artículos (Simulada, requiere query a detalles_pedido)
-                Row(
-                  children: [
-                    const Icon(Icons.shopping_basket_outlined, color: Colors.grey),
-                    const SizedBox(width: 10),
-                    // FutureBuilder para traer los nombres/iconos de los productos
-                    Expanded(
-                      child: FutureBuilder<List<Map<String, dynamic>>>(
-                        // Query con JOIN: Trae la cantidad y el nombre del producto relacionado
-                        future: _supabase
-                            .from('detalles_pedido')
-                            .select('cantidad, productos(nombre)')
-                            .eq('fk_pedido', pedido['id']),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Text("Cargando...", style: TextStyle(fontSize: 12, color: Colors.grey));
-                          }
-                          
-                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return const Text("Sin productos", style: TextStyle(fontSize: 12, color: Colors.grey));
-                          }
-
-                          final detalles = snapshot.data!;
-                          
-                          // Creamos una cadena de texto con los productos: "2x Pizza, 1x Coca-Cola"
-                          String resumen = detalles.map((d) {
-                            final nombre = d['productos']['nombre'];
-                            final cant = d['cantidad'];
-                            return "${cant}x $nombre";
-                          }).join(", ");
-
-                          return Text(
-                            resumen,
-                            overflow: TextOverflow.ellipsis, // Si son muchos, pone "..."
-                            style: const TextStyle(
-                              color: Colors.black87, 
-                              fontSize: 13, 
-                              fontWeight: FontWeight.w500
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Etiqueta del método de pago
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200], 
-                        borderRadius: BorderRadius.circular(5)
-                      ),
-                      child: Text(
-                        pedido['metodo_pago'].toString().toUpperCase(), 
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)
-                      ),
-                    )
-                  ],
-                ),
-                
-                const SizedBox(height: 15),
-                
-                // BOTONES DE ACCIÓN DINÁMICOS
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: _buildBotonAccionPrincipal(pedido),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          // Navegar a pantalla de detalles detallados
-                          _mostrarDetallesPedido(pedido);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color.fromRGBO(0, 180, 195, 1)),
-                          foregroundColor: const Color.fromRGBO(0, 180, 195, 1),
-                        ),
-                        child: const Text("Detalles"),
-                      ),
-                    ),
-                  ],
-                )
-              ],
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(esUrgent ? "URGENTE" : "NORMAL", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              Text("Hace ${diferencia.inMinutes} min ($horaFormateada)", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+        
+        Padding(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("Pedido #${pedido['id'].toString().substring(0, 5)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text("\$${(pedido['total'] as num).toInt()}", style: const TextStyle(fontSize: 18, color: Color.fromRGBO(0, 180, 195, 1), fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 5),
+              
+              // FutureBuilder para obtener el nombre del cliente
+              FutureBuilder<String>(
+                future: _pedidoService.obtenerNombreCliente(pedido['id_usuario']),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Text("Cargando cliente...", style: TextStyle(color: Colors.grey, fontSize: 13));
+                  }
+                  final nombre = snapshot.data ?? "Cliente desconocido";
+                  return Text(
+                    "Cliente: $nombre",
+                    style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 14),
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+              const Divider(),
+              const SizedBox(height: 10),
+              
+              // Sección de productos
+              Row(
+                children: [
+                  const Icon(Icons.shopping_basket_outlined, color: Colors.grey),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _supabase
+                          .from('detalles_pedido')
+                          .select('cantidad, productos(nombre)')
+                          .eq('fk_pedido', pedido['id']),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Text("Cargando...", style: TextStyle(fontSize: 12, color: Colors.grey));
+                        }
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          return const Text("Sin productos", style: TextStyle(fontSize: 12, color: Colors.grey));
+                        }
+
+                        final detalles = snapshot.data!;
+                        String resumen = detalles.map((d) {
+                          final nombre = d['productos']['nombre'];
+                          final cant = d['cantidad'];
+                          return "${cant}x $nombre";
+                        }).join(", ");
+
+                        return Text(
+                          resumen,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(5)),
+                    child: Text(
+                      pedido['metodo_pago'].toString().toUpperCase(), 
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)
+                    ),
+                  )
+                ],
+              ),
+              
+              const SizedBox(height: 15),
+              
+              // --- BOTONES DE ACCIÓN INTEGRADOS ---
+              Row(
+                children: [
+                  // Botón de Acción Principal + Cancelar (Flex 3 para darles prioridad)
+                  Expanded(
+                    flex: 3,
+                    child: _buildBotonAccionPrincipal(pedido),
+                  ),
+                  const SizedBox(width: 8),
+                  // Botón de Detalles (Flex 1)
+                  Expanded(
+                    flex: 1,
+                    child: OutlinedButton(
+                      onPressed: () => _mostrarDetallesPedido(pedido),
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.zero, // Para que el texto quepa bien
+                        side: const BorderSide(color: Color.fromRGBO(0, 180, 195, 1)),
+                        foregroundColor: const Color.fromRGBO(0, 180, 195, 1),
+                      ),
+                      child: const Text("Detalles", style: TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildEstadoVacio(String mensaje) {
     return Center(
@@ -419,25 +425,48 @@ Widget build(BuildContext context) {
   // Define qué botón mostrar según el estado actual
   Widget _buildBotonAccionPrincipal(Map<String, dynamic> pedido) {
     String estado = pedido['estado'];
-    
+    String id = pedido['id'];
+
+    return Row(
+      children: [
+        // BOTÓN DE CANCELAR (Solo aparece si NO está entregado ni cancelado)
+        if (estado != 'entregado' && estado != 'cancelado')
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: IconButton(
+              onPressed: () => _confirmarCancelacion(id),
+              icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+              tooltip: "Cancelar Pedido",
+            ),
+          ),
+        
+        // BOTÓN DE ACCIÓN PRINCIPAL
+        Expanded(
+          child: _crearBotonSegunEstado(estado, id),
+        ),
+      ],
+    );
+  }
+
+  // Método auxiliar para limpiar el switch anterior
+  Widget _crearBotonSegunEstado(String estado, String id) {
     if (estado == "pendiente") {
       return ElevatedButton(
-        onPressed: () => _actualizarEstado(pedido['id'], "preparacion"),
+        onPressed: () => _actualizarEstado(id, "preparacion"),
         style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[600], foregroundColor: Colors.black),
-        child: const Text("Empezar a Preparar"),
+        child: const Text("Preparar"),
       );
     } else if (estado == "preparacion") {
       return ElevatedButton(
-        onPressed: () => _actualizarEstado(pedido['id'], "listo"),
+        onPressed: () => _actualizarEstado(id, "listo"),
         style: ElevatedButton.styleFrom(backgroundColor: const Color.fromRGBO(0, 180, 195, 1), foregroundColor: Colors.white),
-        child: const Text("Marcar como Listo"),
+        child: const Text("Listo"),
       );
     } else {
-      // Estado 'listo' u otros.
       return ElevatedButton(
-        onPressed: () => _actualizarEstado(pedido['id'], "entregado"),
+        onPressed: () => _actualizarEstado(id, "entregado"),
         style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 0, 153, 25), foregroundColor: Colors.white),
-        child: const Text("entregado"),
+        child: const Text("Entregado"),
       );
     }
   }

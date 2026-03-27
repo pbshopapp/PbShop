@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:pbshop/widgets/mostrarestrellas.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/CartService.dart' as CartServiceLib;
-import 'package:pbshop/pantallas/car_page.dart';
 import 'package:pbshop/widgets/CuadroDeImagenes.dart';
 
 class product_page extends StatefulWidget {

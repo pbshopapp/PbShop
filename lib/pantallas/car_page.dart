@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/CartService.dart';
 import 'package:pbshop/pantallas/mis_pedidos_page.dart';
+import 'package:pbshop/servicios/PedidoService.dart';
 
 class car_page extends StatefulWidget {
   const car_page({super.key});
@@ -13,7 +14,7 @@ class car_page extends StatefulWidget {
 class _car_pageState extends State<car_page> {
   bool _isConfirming = false;
   final _cartService = CartService();
-  final int _pedidosActivos = 3; // Esto podrías consultarlo con un count en Supabase
+
 
   // --- FUNCIÓN RESTAURADA: CONFIRMAR PEDIDO ---
   Future<void> _confirmarPedido() async {
@@ -99,37 +100,84 @@ class _car_pageState extends State<car_page> {
   // --- WIDGETS RESTAURADOS ---
 
   Widget _buildPanelSuperiorRestaurado() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Colors.grey[50],
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: PedidoService().getUltimoPedidoStream(),
+      builder: (context, snapshot) {
+        final estado = snapshot.data?['estado']?.toString().toLowerCase() ?? 'ninguno';
+        
+        // Lógica de colores y textos para el dashboard
+        Color colorEstado = const Color.fromRGBO(0, 180, 195, 1);
+        String mensaje = "No tienes pedidos recientes";
+        IconData icono = Icons.shopping_cart_outlined;
+
+        if (estado == 'preparacion') {
+          mensaje = "👨‍🍳 ¡Tu pedido está siendo preparado!";
+          colorEstado = Colors.blue;
+          icono = Icons.restaurant;
+        } else if (estado == 'listo') {
+          mensaje = "✅ ¡Tu pedido está listo para recoger!";
+          colorEstado = Colors.green;
+          icono = Icons.doorbell;
+        } else if (estado == 'cancelado') {
+          mensaje = "❌ Pedido cancelado";
+          colorEstado = Colors.red;
+          icono = Icons.error_outline;
+        }
+
+        return InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MisPedidosPage()),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.1))),
+            ),
+            child: Row(
               children: [
-                const Text("Estado del pedido más reciente", 
-                  style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
-                const Text("👨‍🍳 En Preparación...", 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color.fromRGBO(0, 180, 195, 1))),
-                if (_pedidosActivos > 2)
-                  TextButton(
-                    onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const MisPedidosPage())); }, 
-                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 30)),
-                    child: const Text("Ver todos los pedidos actuales", style: TextStyle(fontSize: 12)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Estado del pedido más reciente",
+                        style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        mensaje,
+                        style: TextStyle(
+                          color: colorEstado,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        "Ver todos los pedidos actuales",
+                        style: TextStyle(color: Colors.deepPurple, fontSize: 12, decoration: TextDecoration.underline),
+                      ),
+                    ],
                   ),
+                ),
+                // Botón circular estilo historial
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorEstado.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icono, color: colorEstado, size: 24),
+                ),
               ],
             ),
           ),
-          // Botón Historial restaurado
-          IconButton.filledTonal(
-            onPressed: () { /* Navegar al historial */ },
-            icon: const Icon(Icons.history_rounded),
-            tooltip: "Ver Historial",
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

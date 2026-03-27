@@ -95,6 +95,9 @@ class DetallePedidoDinamico extends StatelessWidget {
   }
 
   Widget _buildHeaderStatus(String estado, Color color) {
+    // Verificamos si el pedido fue cancelado
+    bool esCancelado = estado.toLowerCase() == 'cancelado';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(25),
@@ -102,20 +105,42 @@ class DetallePedidoDinamico extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5)
+          )
+        ],
       ),
       child: Column(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 30,
-            backgroundColor: Color(0xFFE0F7F9),
-            child: Icon(Icons.check_circle_outline, color: Colors.green, size: 40),
+            // Cambia a fondo rojo suave si es cancelado, si no, azulito
+            backgroundColor: esCancelado ? Colors.red[50] : const Color(0xFFE0F7F9),
+            child: Icon(
+              // El icono cambia a la 'X' roja o al 'chulo' verde
+              esCancelado ? Icons.close : Icons.check_circle_outline,
+              color: esCancelado ? Colors.red : Colors.green,
+              size: 40,
+            ),
           ),
           const SizedBox(height: 15),
           Text(
-            estado.toLowerCase() == 'preparacion' ? "¡Tu pedido está siendo preparado!" : "Estado: $estado",
+            // Mensaje personalizado según el estado
+            esCancelado 
+              ? "Lo sentimos, tu pedido ha sido cancelado" 
+              : (estado.toLowerCase() == 'preparacion' 
+                  ? "¡Tu pedido está siendo preparado!" 
+                  : "Estado: $estado"),
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 18, 
+              fontWeight: FontWeight.bold,
+              // Si quieres que el texto también sea rojo cuando se cancele:
+              color: esCancelado ? Colors.red[700] : Colors.black,
+            ),
           ),
         ],
       ),

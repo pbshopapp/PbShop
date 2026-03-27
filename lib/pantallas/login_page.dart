@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:pbshop/main.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:pbshop/pantallas/inicio_content.dart';
-import 'package:pbshop/servicios/ObtenerDatosUser.dart';
 
 class login_page extends StatefulWidget {
   const login_page({super.key});

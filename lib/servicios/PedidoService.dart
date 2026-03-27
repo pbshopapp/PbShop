@@ -41,4 +41,16 @@ class PedidoService {
       return false;
     }
   }
+  
+  Stream<Map<String, dynamic>?> getUltimoPedidoStream() {
+  final userId = _supabase.auth.currentUser!.id;
+
+  return _supabase
+      .from('pedidos')
+      .stream(primaryKey: ['id'])
+      .eq('id_usuario', userId)
+      .order('fecha', ascending: false)
+      .limit(1)
+      .map((list) => list.isNotEmpty ? list.first : null);
+}
 }

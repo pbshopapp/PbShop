@@ -182,8 +182,7 @@ class _PerfilWidgetState extends State<PerfilWidget> {
   
   @override
   Widget build(BuildContext context) {
-    final nombreAMostrar = _nombreLocal.isEmpty ? widget.nombre : _nombreLocal;
-    final telefonoAMostrar = _telefonoLocal.isEmpty ? widget.telefono : _telefonoLocal;
+    
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
