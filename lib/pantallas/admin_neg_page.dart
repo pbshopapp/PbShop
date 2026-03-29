@@ -263,7 +263,7 @@ void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> pr
                 TextField(controller: descController, maxLines: 2, decoration: const InputDecoration(labelText: "Descripción", border: OutlineInputBorder())),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: categoriaEdit,
+                  initialValue: categoriaEdit,
                   items: categorias.map((cat) => DropdownMenuItem(value: cat['id'].toString(), child: Text(cat['nombre']))).toList(),
                   onChanged: (val) => setModalState(() => categoriaEdit = val),
                   decoration: const InputDecoration(labelText: "Categoría", border: OutlineInputBorder()),
@@ -459,7 +459,7 @@ void _confirmarEliminacion(dynamic id, String nombre) {
                   TextField(controller: descController, maxLines: 2, decoration: const InputDecoration(labelText: "Descripción", border: OutlineInputBorder())),
                   const SizedBox(height: 15),
                   DropdownButtonFormField<String>(
-                    value: categoriaSeleccionada,
+                    initialValue: categoriaSeleccionada,
                     items: categorias.map((cat) => DropdownMenuItem(value: cat['id'].toString(), child: Text(cat['nombre']))).toList(),
                     onChanged: (val) => setModalState(() => categoriaSeleccionada = val),
                     decoration: const InputDecoration(labelText: "Categoría", border: OutlineInputBorder()),

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "933736868776",
+    "project_id": "pbshop-e97ac",
+    "storage_bucket": "pbshop-e97ac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:933736868776:android:40cfeabb3a3448df35cb9d",
+        "android_client_info": {
+          "package_name": "com.pascualbravo.pbshop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAobzXYA3VYuAN1QRW-ftQ1ximxaWRb5HU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

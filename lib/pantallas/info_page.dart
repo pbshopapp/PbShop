@@ -7,6 +7,7 @@ import 'package:pbshop/widgets/PanelPerfil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:pbshop/servicios/ObtenerDatosUser.dart';
+import 'package:pbshop/servicios/NotificacionesService.dart';
 
 class info_page extends StatefulWidget {
   const info_page({super.key});
@@ -108,6 +109,9 @@ Future<void> _cargarDatos() async {
 
           const SizedBox(height: 20),
 
+
+
+          const SizedBox(height: 20),
           // --- SECCIÓN DINÁMICA DE LOGIN / LOGOUT ---
           StreamBuilder<AuthState>(
             stream: Supabase.instance.client.auth.onAuthStateChange,

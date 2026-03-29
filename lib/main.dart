@@ -1,16 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/pantallas.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'servicios/NotificacionesService.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   // Inicialización de Supabase
   await Supabase.initialize(
     url: 'https://suqnkqncfrrougjmguck.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1cW5rcW5jZnJyb3Vnam1ndWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4NTcwMjQsImV4cCI6MjA4NjQzMzAyNH0.lF3qf2DwzhtsJ8FZ531bOpgUvG7pwQPHDUTN22nzOcw',
   );
+  await NotificacionesService.inicializar();
 
+  // Si el usuario ya está logueado, actualizamos su token
+  if (Supabase.instance.client.auth.currentUser != null) {
+    await NotificacionesService.configurarFirebase();
+  }
+  
   runApp(const PBShopApp());
 }
 
@@ -20,6 +40,7 @@ class PBShopApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'PB Shop',
       theme: ThemeData(

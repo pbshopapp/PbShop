@@ -36,7 +36,6 @@ class _LoginPageState extends State<login_page> {
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-
       if (response.user != null) {
         // Consultamos el rol para saber a dónde mandarlo
         final perfil = await Supabase.instance.client

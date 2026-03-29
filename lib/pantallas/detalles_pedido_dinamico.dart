@@ -6,6 +6,7 @@ class DetallePedidoDinamico extends StatelessWidget {
 
   const DetallePedidoDinamico({super.key, required this.idPedido});
 
+  
   @override
   Widget build(BuildContext context) {
     const colorTurquesa = Color.fromRGBO(0, 180, 195, 1);
