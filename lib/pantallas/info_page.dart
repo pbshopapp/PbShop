@@ -7,7 +7,8 @@ import 'package:pbshop/widgets/PanelPerfil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:pbshop/servicios/ObtenerDatosUser.dart';
-import 'package:pbshop/servicios/NotificacionesService.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 
 class info_page extends StatefulWidget {
   const info_page({super.key});
@@ -32,7 +33,7 @@ void initState() {
 Future<void> _cargarDatos() async {
   final obtenerDatosUser = ObtenerDatosUser();
   final perfil = await obtenerDatosUser.getDatosUsuario();
-
+if (!mounted) return; // Verificamos que el widget sigue en pantalla antes de actualizar
   setState(() {
     nombre = perfil.name;
     telefono = perfil.phone;
@@ -155,7 +156,14 @@ Future<void> _cargarDatos() async {
   Widget _botonCerrarSesion(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: () async {
-        await Supabase.instance.client.auth.signOut();
+        final token = await FirebaseMessaging.instance.getToken();
+          if (token != null) {
+            await Supabase.instance.client
+                .from('fcm_tokens')
+                .delete()
+                .eq('token', token);
+          }
+          await Supabase.instance.client.auth.signOut();
         _cargarDatos(); // Limpiamos los datos al cerrar sesión
         setState(() {}); // Forzar actualización de UI después de cerrar sesión
       },

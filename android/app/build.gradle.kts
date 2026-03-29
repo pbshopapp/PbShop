@@ -11,12 +11,12 @@ plugins {
 }
 
 android {
-    namespace = "com.pascualbravo.pbshop"
+    namespace = "com.pbshop.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     defaultConfig {
-        applicationId = "com.pascualbravo.pbshop"
+        applicationId = "com.pbshop.app"
         // En .kts se recomienda usar directamente los valores si flutter.targetSdk falla
         minSdk = flutter.minSdkVersion 
         targetSdk = flutter.targetSdkVersion // Nota el 'Version' al final

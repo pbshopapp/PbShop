@@ -6,10 +6,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-    FlutterLocalNotificationsPlugin();
-
-
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
@@ -18,6 +14,23 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // 1. Definimos el canal de "Alta Importancia"
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'pbshop_canal_alto', // ID único
+    'Avisos de Pedidos PB-Shop', // Nombre que verá el usuario en ajustes
+    description: 'Este canal se usa para avisos urgentes de la cafetería.',
+    importance: Importance.max, // <--- CLAVE PARA EL POP-UP
+    playSound: true,
+  );
+
+  // 2. Registramos el canal en el sistema Android
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
 
   // Inicialización de Supabase
   await Supabase.initialize(
@@ -40,7 +53,7 @@ class PBShopApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigatorKey,
+      //navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'PB Shop',
       theme: ThemeData(

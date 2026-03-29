@@ -23,14 +23,19 @@ class NotificacionesService {
     print("TOKEN DE FIREBASE: $token");
 
     // Guardar en Supabase
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId != null && token != null) {
-      await Supabase.instance.client
-          .from('perfiles') 
-          .update({'fcm_token': token})
-          .eq('id', userId);
-    }
+    // Guardar en Supabase (Nueva tabla fcm_tokens)
+final userId = Supabase.instance.client.auth.currentUser?.id;
 
+if (userId != null && token != null) {
+  await Supabase.instance.client
+      .from('fcm_tokens') // <--- CAMBIO: Nombre de la tabla nueva
+      .upsert({           // <--- CAMBIO: Usamos upsert para evitar duplicados
+        'usuario_id': userId,
+        'token': token,
+      }, onConflict: 'token'); // Si el token ya existe para este usuario, solo lo ignora o actualiza
+      
+  print("Token registrado exitosamente en fcm_tokens");
+}
     // --- NUEVO: Escuchar mensajes cuando la app está abierta ---
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.notification != null) {

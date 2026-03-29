@@ -1,4 +1,4 @@
-package com.pascualbravo.pbshop
+package com.pbshop.app
 
 import io.flutter.embedding.android.FlutterActivity
 

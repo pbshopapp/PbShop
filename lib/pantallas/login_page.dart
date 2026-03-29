@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:pbshop/main.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class login_page extends StatefulWidget {
   const login_page({super.key});
@@ -14,6 +15,7 @@ class _LoginPageState extends State<login_page> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _telefonoController = TextEditingController();
+
   
   bool _isLoading = false;
   // CAMBIO 1: Ahora _isLogin empieza en 'true' para mostrar primero el inicio de sesión
@@ -31,36 +33,66 @@ class _LoginPageState extends State<login_page> {
   // FUNCIÓN PARA INICIAR SESIÓN
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
+    
     try {
+      // 1. Autenticación en Supabase
       final response = await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+
       if (response.user != null) {
-        // Consultamos el rol para saber a dónde mandarlo
+        // 2. Intento de actualizar el Token FCM (encapsulado para que no rompa el login)
+        try {
+          String? fcmToken = await FirebaseMessaging.instance.getToken().timeout(
+            const Duration(seconds: 5),
+          );
+          
+          if (fcmToken != null) {
+            await Supabase.instance.client
+                .from('fcm_tokens')
+                .upsert({
+                  'usuario_id': response.user!.id,
+                  'token': fcmToken,
+                }, onConflict: 'token'); // Si el token ya existe, solo actualiza la fecha
+            print("Token registrado en el clúster de dispositivos");
+          }
+        } catch (e) {
+          print("Error no crítico guardando el token: $e");
+          // No detenemos el flujo, el usuario aún puede usar la app sin notificaciones
+        }
+
+        // 3. Obtener el rol del usuario
         final perfil = await Supabase.instance.client
             .from('perfiles')
             .select('rol')
             .eq('id', response.user!.id)
             .maybeSingle();
 
-        if (mounted) {
-          if (perfil != null && perfil['rol'] == 'admin_negocio') {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const admin_neg_page()));
-             // Cargamos los datos del nuevo usuario para mostrar su perfil actualizado en info_page
-          } else {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const PBShopApp()), // Aquí pones el nombre de tu clase
-              (route) => false, // Esto borra el historial para que no puedan volver al Login
-            );
-          }
+        // 4. Verificación de seguridad antes de navegar o hacer setState
+        if (!mounted) return;
+
+        if (perfil != null && perfil['rol'] == 'admin_negocio') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const admin_neg_page()),
+          );
+        } else {
+          // Navegamos a la página, NO a la clase que tiene el MaterialApp
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const PBShopApp()), 
+            (route) => false,
+          );
         }
       }
     } on AuthException catch (error) {
-      _mostrarError(error.message);
+      if (mounted) _mostrarError(error.message);
+    } catch (error) {
+      print("Error inesperado: $error");
+      if (mounted) _mostrarError("Error al conectar con el servidor");
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
