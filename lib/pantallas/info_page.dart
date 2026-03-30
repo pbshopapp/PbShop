@@ -156,13 +156,22 @@ if (!mounted) return; // Verificamos que el widget sigue en pantalla antes de ac
   Widget _botonCerrarSesion(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: () async {
-        final token = await FirebaseMessaging.instance.getToken();
+        try {
+          // 1. Intentamos borrar el token (con un timeout para que no bloquee)
+          final token = await FirebaseMessaging.instance.getToken().timeout(
+            const Duration(seconds: 2), 
+            onTimeout: () => null,
+          );
+          
           if (token != null) {
             await Supabase.instance.client
                 .from('fcm_tokens')
                 .delete()
                 .eq('token', token);
           }
+        } catch (e) {
+          print("Error silencioso al borrar token: $e");
+        }
           await Supabase.instance.client.auth.signOut();
         _cargarDatos(); // Limpiamos los datos al cerrar sesión
         setState(() {}); // Forzar actualización de UI después de cerrar sesión
