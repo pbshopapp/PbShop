@@ -19,7 +19,7 @@ Future<void> main() async {
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'pbshop_canal_alto', // ID único
     'Avisos de Pedidos PB-Shop', // Nombre que verá el usuario en ajustes
-    description: 'Este canal se usa para avisos urgentes de la cafetería.',
+    description: 'Este canal se usa para avisos urgentes de los pedidos.',
     importance: Importance.max, // <--- CLAVE PARA EL POP-UP
     playSound: true,
   );
