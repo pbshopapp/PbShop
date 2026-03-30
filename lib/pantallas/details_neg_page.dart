@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:pbshop/widgets/CartaProducto.dart'; // Reutilizamos tu widget de productos
+import 'package:pbshop/widgets/CartaProducto.dart';
 
 class details_neg_page extends StatelessWidget {
   final Map<String, dynamic> negocio;
@@ -14,12 +14,20 @@ class details_neg_page extends StatelessWidget {
         slivers: [
           // 1. Banner Superior con el nombre
           SliverAppBar(
-            expandedHeight: 200.0,
+            expandedHeight: 220.0,
             floating: false,
             pinned: true,
+            iconTheme: const IconThemeData(color: Colors.white),
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(negocio['nombre'], 
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              title: Text(
+                negocio['nombre'],
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  shadows: [Shadow(blurRadius: 10, color: Colors.black)],
+                ),
+              ),
               background: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -51,49 +59,73 @@ class details_neg_page extends StatelessWidget {
                     children: [
                       const Icon(Icons.location_on, color: Colors.redAccent, size: 18),
                       const SizedBox(width: 5),
-                      Text(negocio['ubicacion'], style: const TextStyle(fontSize: 16)),
+                      Expanded(
+                        child: Text(
+                          negocio['ubicacion'] ?? 'Ubicación no disponible',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(negocio['descripcion'] ?? 'Sin descripción disponible.',
-                      style: TextStyle(color: Colors.grey[600])),
-                  const Divider(height: 30),
-                  const Text("Nuestra Carta", 
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Text(
+                    negocio['descripcion'] ?? 'Sin descripción disponible.',
+                    style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                  ),
+                  const Divider(height: 40, thickness: 1),
+                  const Text(
+                    "Nuestra Carta",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
                 ],
               ),
             ),
           ),
 
-          // 3. Lista de Productos de ESTA tienda solamente
+          // 3. Lista de Productos Responsiva
           StreamBuilder<List<Map<String, dynamic>>>(
-            // FILTRO CLAVE: .eq('fk_negocio', negocio['id'])
             stream: Supabase.instance.client
                 .from('productos')
                 .stream(primaryKey: ['id'])
-                .eq('fk_negocio', negocio['id']), 
+                .eq('fk_negocio', negocio['id']),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
                 return const SliverToBoxAdapter(
-                    child: Center(child: CircularProgressIndicator()));
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                );
               }
 
-              final productos = snapshot.data!;
+              final productos = snapshot.data ?? [];
 
               if (productos.isEmpty) {
                 return const SliverToBoxAdapter(
-                  child: Center(child: Text("\nNo hay productos disponibles")),
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40.0),
+                      child: Text(
+                        "Este negocio aún no tiene productos registrados",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ),
                 );
               }
 
               return SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 0.8,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200, // Ajuste automático de columnas
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    mainAxisExtent: 260, // Altura fija para evitar cortes
                   ),
                   delegate: SliverChildBuilderDelegate(
                     (context, index) => CartaProducto(producto: productos[index]),
@@ -103,6 +135,8 @@ class details_neg_page extends StatelessWidget {
               );
             },
           ),
+          // Espaciado final para scroll cómodo
+          const SliverToBoxAdapter(child: SizedBox(height: 50)),
         ],
       ),
     );

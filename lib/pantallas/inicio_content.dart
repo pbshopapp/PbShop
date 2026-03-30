@@ -17,13 +17,12 @@ class _InicioContentState extends State<InicioContent> {
 
   @override
   Widget build(BuildContext context) {
-    // Pedimos el stream completo de la vista.
+    // Definimos el stream de productos
     final Stream<List<Map<String, dynamic>>> productosStream = Supabase.instance.client
         .from('v_productos_con_rating')
         .stream(primaryKey: ['id']);
 
-    // SOLUCIÓN: Agregamos un Scaffold para proporcionar el contexto de Material Design
-    return Scaffold( 
+    return Scaffold(
       body: CustomScrollView(
         slivers: [
           const EncabezadoAnimado(),
@@ -49,7 +48,7 @@ class _InicioContentState extends State<InicioContent> {
                 return const SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
-                      padding: EdgeInsets.all(20.0),
+                      padding: EdgeInsets.all(50.0),
                       child: CircularProgressIndicator(),
                     ),
                   ),
@@ -58,6 +57,7 @@ class _InicioContentState extends State<InicioContent> {
 
               List<Map<String, dynamic>> productos = snapshot.data ?? [];
 
+              // Filtro de búsqueda local
               if (textoBusqueda.isNotEmpty) {
                 productos = productos.where((item) {
                   final nombre = item['nombre'].toString().toLowerCase();
@@ -65,7 +65,7 @@ class _InicioContentState extends State<InicioContent> {
                   return nombre.contains(consulta);
                 }).toList();
               } else {
-                productos.shuffle();
+                productos.shuffle(); // Aleatoriedad si no hay búsqueda
               }
 
               if (productos.isEmpty) {
@@ -82,14 +82,15 @@ class _InicioContentState extends State<InicioContent> {
                 );
               }
 
+              // GRID DINÁMICO Y RESPONSIVO
               return SliverPadding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
                 sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 0.8,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200, // Cada tarjeta no medirá más de 200px de ancho
+                    mainAxisSpacing: 12,    // Espacio vertical entre tarjetas
+                    crossAxisSpacing: 12,   // Espacio horizontal entre tarjetas
+                    mainAxisExtent: 260,    // ALTURA FIJA: Evita que el precio se corte
                   ),
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
@@ -101,6 +102,8 @@ class _InicioContentState extends State<InicioContent> {
               );
             },
           ),
+          // Espacio extra al final para que el último producto no quede pegado al borde
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
       ),
     );
