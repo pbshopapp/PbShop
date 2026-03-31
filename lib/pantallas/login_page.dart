@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pbshop/main.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
+import 'package:pbshop/pantallas/home_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -81,7 +82,7 @@ class _LoginPageState extends State<login_page> {
           // Navegamos a la página, NO a la clase que tiene el MaterialApp
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (context) => const PBShopApp()), 
+            MaterialPageRoute(builder: (context) => const home_page()), 
             (route) => false,
           );
         }

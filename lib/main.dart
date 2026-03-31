@@ -22,6 +22,7 @@ Future<void> main() async {
     description: 'Este canal se usa para avisos urgentes de los pedidos.',
     importance: Importance.max, // <--- CLAVE PARA EL POP-UP
     playSound: true,
+    sound: RawResourceAndroidNotificationSound('noti'),
   );
 
   // 2. Registramos el canal en el sistema Android
@@ -53,7 +54,7 @@ class PBShopApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      //navigatorKey: navigatorKey,
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'PB Shop',
       theme: ThemeData(
