@@ -6,8 +6,8 @@ import 'package:pbshop/pantallas/home_page.dart';
 import 'package:pbshop/pantallas/pedidos_neg_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_core/firebase_core.dart';
-
+import 'dart:convert';
+import 'dart:typed_data';
 
 class NotificacionesService {
   static final _plugin = FlutterLocalNotificationsPlugin();
@@ -38,43 +38,48 @@ class NotificacionesService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      String? token = await messaging.getToken();
-      print("TOKEN DE FIREBASE: $token");
+      // 1. REGISTRO DEL TOKEN (Lógica de red)
+      try {
+        String? token = await messaging.getToken().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => null,
+        );
 
-      // Guardar en Supabase
-      // Guardar en Supabase (Nueva tabla fcm_tokens)
-      final userId = Supabase.instance.client.auth.currentUser?.id;
+        if (token != null) {
+          print("TOKEN DE FIREBASE: $token");
+          final userId = Supabase.instance.client.auth.currentUser?.id;
 
-      if (userId != null && token != null) {
-        await Supabase.instance.client
-            .from('fcm_tokens') // <--- CAMBIO: Nombre de la tabla nueva
-            .upsert({           // <--- CAMBIO: Usamos upsert para evitar duplicados
+          if (userId != null) {
+            await Supabase.instance.client.from('fcm_tokens').upsert({
               'usuario_id': userId,
               'token': token,
-            }, onConflict: 'token'); // Si el token ya existe para este usuario, solo lo ignora o actualiza
-            
-        print("Token registrado exitosamente en fcm_tokens");
+            }, onConflict: 'token');
+            print("Token registrado exitosamente en fcm_tokens");
+          }
+        }
+      } catch (e) {
+        print("Error al procesar el token: $e");
       }
-          // --- NUEVO: Escuchar mensajes cuando la app está abierta ---
-          FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-            if (message.notification != null) {
-              String idPedido = message.data['id_pedido'] ?? '';
-              String screen = message.data['screen'] ?? 'ESTUDIANTE'; // <--- Recuperamos el screen
 
-              mostrar(
-                message.notification!.title ?? 'Nuevo Aviso',
-                message.notification!.body ?? '',
-                idPedido,
-                screen, // <--- Se lo pasamos a la función mostrar
-              );
-            }
-          });
+      // 2. CONFIGURACIÓN DE ESCUCHA (Fuera del bloque del token)
+      // Esto debe ejecutarse SIEMPRE que haya permisos, funcione el token o no.
+      
+      // App abierta
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (message.notification != null) {
+          mostrar(
+            message.notification!.title ?? '',
+            message.notification!.body ?? '',
+            message.data, 
+          );
+        }
+      });
 
-          // --- NUEVO: Manejar clic cuando la app estaba en segundo plano ---
-          FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-            print("Notificación tocada (App en segundo plano): ${message.data}");
-            _manejarClic(message.data);
-          });
+      // App en segundo plano (clic)
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        print("Notificación tocada: ${message.data}");
+        _manejarClic(message.data);
+      });
     }
   }
   static Future<void> inicializar() async {
@@ -82,16 +87,11 @@ class NotificacionesService {
 
     await _plugin.initialize(
       const InitializationSettings(android: android),
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        String? payload = response.payload;
-        if (payload != null && payload.contains('|')) {
-          // Separamos el screen del idPedido
-          final partes = payload.split('|');
-          final String screen = partes[0];
-          final String idPedido = partes[1];
-
-          // Usamos la lógica centralizada que ya creaste
-          _manejarClic({'screen': screen, 'id_pedido': idPedido});
+      onDidReceiveNotificationResponse: (NotificationResponse details) {
+        if (details.actionId == 'id_ver_pedido' && details.payload != null) {
+          // Ahora sí decodificamos tranquilos
+          final Map<String, dynamic> data = jsonDecode(details.payload!);
+          _manejarClic(data);
         }
       },
     );
@@ -101,26 +101,56 @@ class NotificacionesService {
         ?.requestNotificationsPermission();
   }
 
-  static Future<void> mostrar(String titulo, String cuerpo, String idPedido, String screen) async { // <--- Agregamos screen
-    const detalles = NotificationDetails(
+  static Future<void> mostrar(String titulo, String cuerpo, Map<String, dynamic> data) async {
+    final String? tipo = data['tipo_alerta'];
+    
+    // Configuramos la vibración solo si es URGENTE
+    final Int64List? patronVibracion = (tipo == "URGENTE") 
+        ? Int64List.fromList([0, 1000, 500, 2000]) 
+        : null;
+
+    final detalles = NotificationDetails(
       android: AndroidNotificationDetails(
-        'pb_shop_canal', 'Pedidos PB-Shop',
+        'pbshop_canal_final',
+        'Avisos de Pedidos PB-Shop',
         importance: Importance.max,
-        priority: Priority.high,
-        sound: RawResourceAndroidNotificationSound('noti'),
-        playSound: true
+        priority: Priority.max,
+        fullScreenIntent: true,
+        sound: RawResourceAndroidNotificationSound('campana'),
+        vibrationPattern: patronVibracion,
+        enableVibration: true,
+
+        additionalFlags: (tipo == "URGENTE") 
+            ? Int32List.fromList([4]) // El valor 4 es el código interno para 'Insistent' en Android
+            : null, // Solo repite si es listo
+
+        actions: <AndroidNotificationAction>[
+          AndroidNotificationAction(
+            'id_silenciar', 
+            'Solo Silenciar', 
+            cancelNotification: true, // Esto mata la vibración de una
+            showsUserInterface: false, // NO abre la app
+          ),
+          AndroidNotificationAction(
+            'id_ver_pedido', 
+            'Ver Pedido', 
+            cancelNotification: true,
+            showsUserInterface: true, // SI abre la app
+          ),
+        ],
       ),
     );
-    
-    // Guardamos ambos datos separados por un pipe |
-    String payloadData = "$screen|$idPedido";
 
+    print("DEBUG: Intentando mostrar botones para tipo: $tipo");
+    if (tipo == "URGENTE") {
+      print("DEBUG: Configurando botones 'Silenciar' y 'Ver Pedido'");
+    }
     await _plugin.show(
       DateTime.now().millisecond, 
       titulo, 
       cuerpo, 
       detalles, 
-      payload: payloadData // <--- Enviamos la combinación
+      payload: jsonEncode(data) // Pasamos toda la data
     );
   }
   

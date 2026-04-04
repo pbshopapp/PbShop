@@ -17,7 +17,7 @@ Future<void> main() async {
 
   // 1. Definimos el canal de "Alta Importancia"
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'pbshop_canal_alto', // ID único
+    'pbshop_canal_final', // ID único
     'Avisos de Pedidos PB-Shop', // Nombre que verá el usuario en ajustes
     description: 'Este canal se usa para avisos urgentes de los pedidos.',
     importance: Importance.max, // <--- CLAVE PARA EL POP-UP

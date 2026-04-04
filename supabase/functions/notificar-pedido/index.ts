@@ -3,40 +3,40 @@ import { createClient } from "jsr:@supabase/supabase-js@2"
 import { JWT } from "npm:google-auth-library@8.8.0"
 
 serve(async (req) => {
-  console.log("!!! FUNCIÓN INVOCADA - PB-SHOP !!!"); // <--- AGREGA ESTA LÍNEA
+  console.log("!!! FUNCIÓN INVOCADA - PB-SHOP !!!");
   try {
     const payload = await req.json()
-    console.log("Payload recibido:", JSON.stringify(payload));
-    const { record, old_record, type } = payload
+    const { record, type } = payload
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', // <--- USA ESTA VARIABLE
-      {
-        auth: {
-          persistSession: false,
-        },
-      }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } }
     )
 
-    // ... dentro del serve ...
-    let tokensDestino: string[] = [] // Ahora es una lista de tokens
+    let tokensDestino: string[] = []
     let titulo = ""
     let cuerpo = ""
+    let dataExtra = {} // <--- 1. INICIALIZAR VACÍO FUERA DE LOS IF
 
     if (type === 'INSERT') {
       titulo = "¡Nuevo pedido en PB-Shop! 🍔"
       cuerpo = "Tienes un pedido pendiente por preparar."
       
-      // 1. Buscamos al tendero
+// En tu index.ts de Supabase, cuando el estado sea 'LISTO'
+      dataExtra = { 
+        screen: "TENDERO", 
+        id_pedido: record.id.toString(),
+        tipo_alerta: "NORMAL" // <--- Agregamos este campo
+      };
+      
       const { data: tendero } = await supabase
         .from('perfiles')
         .select('id')
         .eq('rol', 'tendero')
         .maybeSingle()
-
+      
       if (tendero) {
-        // 2. Traemos TODOS sus tokens de la tabla fcm_tokens
         const { data: rows } = await supabase
           .from('fcm_tokens')
           .select('token')
@@ -49,7 +49,13 @@ serve(async (req) => {
       titulo = "Actualización de pedido 📦"
       cuerpo = `Tu pedido de PB-Shop ahora está: ${record.estado}`
       
-      // Traemos TODOS los tokens del estudiante que hizo el pedido
+      dataExtra = { 
+        screen: "ESTUDIANTE",
+        id_pedido: record.id.toString(),
+        // Si el estado es 'LISTO', mandamos URGENTE, si no, NORMAL
+        tipo_alerta: record.estado === 'listo' ? "URGENTE" : "NORMAL" 
+      };
+
       const { data: rows } = await supabase
         .from('fcm_tokens')
         .select('token')
@@ -58,33 +64,28 @@ serve(async (req) => {
       if (rows) tokensDestino = rows.map(r => r.token)
     }
 
-    // EJECUCIÓN PARA TODOS LOS TOKENS
     if (tokensDestino.length > 0) {
       console.log(`Enviando a ${tokensDestino.length} dispositivos...`)
-      
-      // Usamos Promise.all para enviar a todos en paralelo (más rápido)
+      console.log("--- DEBUG ENVIANDO NOTIFICACIÓN ---");
+      console.log("Estado del pedido:", record.estado);
+      console.log("Data que se enviará:", JSON.stringify(dataExtra));
       const promesas = tokensDestino.map(token => 
-        enviarAFirebase(token, titulo, cuerpo, record.id)
+        enviarAFirebase(token, titulo, cuerpo, dataExtra) // <--- 2. PASAR dataExtra AQUÍ
       )
       
       const resultados = await Promise.all(promesas)
-      console.log("Resultados de envíos:", JSON.stringify(resultados))
-      
-      return new Response(JSON.stringify({ sent: tokensDestino.length }), { status: 200 })
-    } else {
-      console.log("No se encontraron tokens para este envío.")
-      return new Response(JSON.stringify({ message: "Sin tokens" }), { status: 200 })
+      return new Response(JSON.stringify(resultados), { status: 200 })
     }
 
-    return new Response(JSON.stringify({ message: "No se requería notificación" }), { status: 200 })
+    return new Response(JSON.stringify({ message: "Sin tokens" }), { status: 200 })
 
   } catch (error) {
-    console.error("Error crítico:", error.message)
     return new Response(JSON.stringify({ error: error.message }), { status: 500 })
   }
 })
 
-async function enviarAFirebase(fcmToken: string, title: string, body: string, idPedido: any) {
+// 3. ACTUALIZAR LA FUNCIÓN PARA RECIBIR Y ENVIAR EL DATA
+async function enviarAFirebase(fcmToken: string, title: string, body: string, dataExtra: any) {
   const rawConfig = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
   if (!rawConfig) throw new Error("Secret no configurado.");
 
@@ -98,7 +99,6 @@ async function enviarAFirebase(fcmToken: string, title: string, body: string, id
   const { token } = await client.getAccessToken()
   const projectId = firebaseConfig.project_id
 
-  // Formato de ALTA PRIORIDAD para asegurar el Pop-up
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
     method: 'POST',
     headers: {
@@ -112,13 +112,16 @@ async function enviarAFirebase(fcmToken: string, title: string, body: string, id
         android: {
           priority: "high",
           notification: {
-            sound: "default",
+            channel_id: "pbshop_canal_final",
+            sound: "noti",
             click_action: "FLUTTER_NOTIFICATION_CLICK",
-            notification_priority: "PRIORITY_MAX", // Máxima importancia en Android
+            notification_priority: "PRIORITY_MAX",
           }
         },
         data: { 
-          id_pedido: idPedido.toString(),
+          //title: title, // Mandamos el título como dato
+          //body: body,   // Mandamos el cuerpo como dato
+          ...dataExtra, // <--- AQUÍ SE INCLUYEN screen E id_pedido
           click_action: "FLUTTER_NOTIFICATION_CLICK"
         }, 
       },

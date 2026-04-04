@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/ProductosService.dart';
+import 'package:pbshop/widgets/CartaProducto.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 
@@ -96,91 +97,86 @@ class _AdminNegPageState extends State<admin_neg_page> {
     );
   }
 
-  Widget _buildHeaderNegocio() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-      ),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 50,
+ Widget _buildHeaderNegocio() {
+    return Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 40),
+          padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(25),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)],
+          ),
+          child: Column(
+            children: [
+              Text(
+                datosNegocio!['nombre'] ?? "Mi Negocio",
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 5),
+              const Text("Administrador de inventario", style: TextStyle(color: Colors.grey, fontSize: 14)),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () => _mostrarVentanaNuevoProducto(context),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text("Publicar Producto", style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Foto de perfil flotante con borde
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 4),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+          ),
+          child: CircleAvatar(
+            radius: 45,
             backgroundImage: NetworkImage(datosNegocio!['imagen_url'] ?? 'https://via.placeholder.com/150'),
           ),
-          const SizedBox(height: 15),
-          Text(datosNegocio!['nombre'] ?? "Mi Negocio", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () => _mostrarVentanaNuevoProducto(context),
-            icon: const Icon(Icons.add),
-            label: const Text("Agregar Producto Nuevo"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildListaProductos() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _supabase.from('productos').stream(primaryKey: ['id']).eq('fk_negocio', datosNegocio!['id']),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const CircularProgressIndicator();
-        final productos = snapshot.data ?? [];
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: productos.length,
-          itemBuilder: (context, index) {
-            final prod = productos[index];
-            return ListTile(
-              leading: prod['imagen_url'] != null 
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      prod['imagen_url'], 
-                      width: 50, 
-                      height: 50, 
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.image_not_supported),
-                    ),
-                  )
-                : const Icon(Icons.image, size: 50),
-              title: Text(
-                prod['nombre'], 
-                style: const TextStyle(fontWeight: FontWeight.bold)
-              ),
-              subtitle: Text("\$ ${prod['precio']}"),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min, // Importante para que el Row no ocupe toda la pantalla
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                    onPressed: () {
-                      // Aquí llamarías a tu función de edición pasando el producto
-                      _mostrarVentanaEditarProducto(context, prod);
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => _confirmarEliminacion(prod['id'], prod['nombre']),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+  return StreamBuilder<List<Map<String, dynamic>>>(
+    stream: _supabase.from('productos').stream(primaryKey: ['id']).eq('fk_negocio', datosNegocio!['id']),
+    builder: (context, snapshot) {
+      if (!snapshot.hasData) return const CircularProgressIndicator();
+      final productos = snapshot.data!;
+
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, // Dos columnas como en la tienda
+          childAspectRatio: 0.8,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+        ),
+        itemCount: productos.length,
+        itemBuilder: (context, index) {
+          return CartaProducto(
+            producto: productos[index],
+            esAdmin: true, // <--- ACTIVAMOS EL MODO ADMIN
+            onEdit: () => _mostrarVentanaEditarProducto(context, productos[index]),
+            onDelete: () => _confirmarEliminacion(productos[index]['id'], productos[index]['nombre']),
+          );
+        },
+      );
+    },
+  );
+}
+
 
 void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> producto) {
   final nomController = TextEditingController(text: producto['nombre']);

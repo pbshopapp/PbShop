@@ -3,88 +3,92 @@ import { createClient } from "jsr:@supabase/supabase-js@2"
 import { JWT } from "npm:google-auth-library@8.8.0"
 
 serve(async (req) => {
+  console.log("!!! FUNCIÓN INVOCADA - PB-SHOP !!!");
   try {
     const payload = await req.json()
-    const { record, old_record, type } = payload
+    const { record, type } = payload
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } }
     )
 
     let tokensDestino: string[] = []
     let titulo = ""
     let cuerpo = ""
+    let dataExtra = {} // <--- 1. INICIALIZAR VACÍO FUERA DE LOS IF
 
-    // 1. LÓGICA PARA NUEVO PEDIDO (Para el tendero)
     if (type === 'INSERT') {
       titulo = "¡Nuevo pedido en PB-Shop! 🍔"
-      cuerpo = `Tienes un nuevo pedido pendiente. ¡A trabajar!`
+      cuerpo = "Tienes un pedido pendiente por preparar."
       
-      // Buscamos todos los tokens de los usuarios con rol 'tendero'
-      const { data: tenderos } = await supabase
+      dataExtra = { 
+        screen: "TENDERO", // <--- Usa el mismo nombre que pusiste en Flutter
+        id_pedido: record.id.toString() 
+      };
+      
+      const { data: tendero } = await supabase
         .from('perfiles')
         .select('id')
         .eq('rol', 'tendero')
-
-      if (tenderos && tenderos.length > 0) {
-        const idsTenderos = tenderos.map(t => t.id)
-        const { data: fcmRows } = await supabase
+        .maybeSingle()
+      
+      if (tendero) {
+        const { data: rows } = await supabase
           .from('fcm_tokens')
           .select('token')
-          .in('usuario_id', idsTenderos)
+          .eq('usuario_id', tendero.id)
         
-        tokensDestino = fcmRows?.map(r => r.token) || []
+        if (rows) tokensDestino = rows.map(r => r.token)
       }
     } 
-    // 2. LÓGICA PARA ACTUALIZACIÓN (Para el cliente)
-    else if (type === 'UPDATE' && record.estado !== old_record.estado) {
-      titulo = "Actualización de tu pedido"
-      cuerpo = `Tu pedido ahora está: ${record.estado}`
+    else if (type === 'UPDATE') {
+      titulo = "Actualización de pedido 📦"
+      cuerpo = `Tu pedido de PB-Shop ahora está: ${record.estado}`
       
-      // Traemos todos los tokens registrados para ese usuario específico
-      const { data: fcmRows } = await supabase
+      dataExtra = { 
+        screen: "ESTUDIANTE", // <--- Usa el mismo nombre que pusiste en Flutter
+        id_pedido: record.id.toString() 
+      };
+
+      const { data: rows } = await supabase
         .from('fcm_tokens')
         .select('token')
         .eq('usuario_id', record.id_usuario)
       
-      tokensDestino = fcmRows?.map(r => r.token) || []
+      if (rows) tokensDestino = rows.map(r => r.token)
     }
 
-    // 3. ENVÍO MULTI-DISPOSITIVO
     if (tokensDestino.length > 0) {
       console.log(`Enviando a ${tokensDestino.length} dispositivos...`)
       
-      // Ejecutamos todos los envíos en paralelo
       const promesas = tokensDestino.map(token => 
-        enviarAFirebase(token, titulo, cuerpo, record.id)
+        enviarAFirebase(token, titulo, cuerpo, dataExtra) // <--- 2. PASAR dataExtra AQUÍ
       )
       
       const resultados = await Promise.all(promesas)
-      return new Response(JSON.stringify({ total: resultados.length, detalles: resultados }), { 
-        status: 200, 
-        headers: { "Content-Type": "application/json" } 
-      })
+      return new Response(JSON.stringify(resultados), { status: 200 })
     }
 
-    return new Response(JSON.stringify({ message: "No se encontraron tokens activos" }), { status: 200 })
+    return new Response(JSON.stringify({ message: "Sin tokens" }), { status: 200 })
 
   } catch (error) {
-    console.error("Error crítico:", error.message)
     return new Response(JSON.stringify({ error: error.message }), { status: 500 })
   }
 })
 
-async function enviarAFirebase(fcmToken: string, title: string, body: string, idPedido: any) {
-  const rawConfig = Deno.env.get('FIREBASE_SERVICE_ACCOUNT')
-  if (!rawConfig) throw new Error("Falta FIREBASE_SERVICE_ACCOUNT")
+// 3. ACTUALIZAR LA FUNCIÓN PARA RECIBIR Y ENVIAR EL DATA
+async function enviarAFirebase(fcmToken: string, title: string, body: string, dataExtra: any) {
+  const rawConfig = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
+  if (!rawConfig) throw new Error("Secret no configurado.");
 
-  const firebaseConfig = JSON.parse(rawConfig.trim())
+  const firebaseConfig = JSON.parse(rawConfig.trim());
   const client = new JWT({
     email: firebaseConfig.client_email,
     key: firebaseConfig.private_key,
     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-  })
+  });
 
   const { token } = await client.getAccessToken()
   const projectId = firebaseConfig.project_id
@@ -99,19 +103,21 @@ async function enviarAFirebase(fcmToken: string, title: string, body: string, id
       message: {
         token: fcmToken,
         notification: { title, body },
-        data: { 
-          id_pedido: idPedido.toString(),
-          click_action: "FLUTTER_NOTIFICATION_CLICK" 
-        },
         android: {
           priority: "high",
           notification: {
             channel_id: "pbshop_canal_alto",
-            sound: "default"
+            sound: "noti",
+            click_action: "FLUTTER_NOTIFICATION_CLICK",
+            notification_priority: "PRIORITY_MAX",
           }
-        }
-      }
-    })
+        },
+        data: { 
+          ...dataExtra, // <--- AQUÍ SE INCLUYEN screen E id_pedido
+          click_action: "FLUTTER_NOTIFICATION_CLICK"
+        }, 
+      },
+    }),
   })
 
   return await res.json()

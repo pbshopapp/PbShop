@@ -1,14 +1,18 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:pbshop/pantallas/mis_pedidos_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+// Tus imports existentes
 import 'package:pbshop/pantallas/documentation_page.dart';
 import 'package:pbshop/pantallas/help_page.dart';
 import 'package:pbshop/pantallas/login_page.dart';
+import 'package:pbshop/pantallas/mi_cuenta.dart';
 import 'package:pbshop/pantallas/pedidos_neg_page.dart';
-import 'package:pbshop/widgets/PanelPerfil.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:pbshop/servicios/ObtenerDatosUser.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-
+import 'package:pbshop/widgets/widgetsInfo.dart';
 
 class info_page extends StatefulWidget {
   const info_page({super.key});
@@ -20,187 +24,193 @@ class info_page extends StatefulWidget {
 class _InfoPageState extends State<info_page> {
   String nombre = "Usuario no registrado";
   String telefono = "********";
+  String avatarUrl = "https://via.placeholder.com/150";
+  // La contraseña no la mostramos por seguridad en este diseño, pero la cargamos
   String contrasena = "********";
-  String avatarUrl = "https://via.placeholder.com/150"; // valor por defecto
 
-@override
-void initState() {
-  super.initState();
-  _cargarDatos(); // Cargamos los datos por primera vez
-}
+  @override
+  void initState() {
+    super.initState();
+    _cargarDatos();
+  }
 
-// Creamos un método para (re)cargar los datos
-Future<void> _cargarDatos() async {
-  final obtenerDatosUser = ObtenerDatosUser();
-  final perfil = await obtenerDatosUser.getDatosUsuario();
-if (!mounted) return; // Verificamos que el widget sigue en pantalla antes de actualizar
-  setState(() {
-    nombre = perfil.name;
-    telefono = perfil.phone;
-    contrasena = perfil.password;
-    avatarUrl = perfil.avatarUrl;
-  });
-}
+  Future<void> _cargarDatos() async {
+    try {
+      final obtenerDatosUser = ObtenerDatosUser();
+      final perfil = await obtenerDatosUser.getDatosUsuario();
+      if (!mounted) return;
+      setState(() {
+        nombre = perfil.name;
+        telefono = perfil.phone;
+        contrasena = perfil.password;
+        avatarUrl = perfil.avatarUrl;
+      });
+    } catch (e) {
+      print("Error cargando perfil: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Cuenta")),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text(
-            "PB Shop",
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color.fromRGBO(0, 180, 195, 1),
+      backgroundColor: Colors.grey[100], // Fondo gris claro estilo DiDi
+      appBar: AppBar(
+        title: const Text("Cuenta", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: false,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: Supabase.instance.client
+                  .from('perfiles')
+                  .stream(primaryKey: ['id'])
+                  .eq('id', Supabase.instance.client.auth.currentUser?.id ?? ''),
+              builder: (context, snapshot) {
+                // Si está cargando y no tiene datos previos, podrías mostrar un shimmer o dejar que pase
+                // Pero para evitar que se quede "pensando" eternamente:
+                
+                bool tieneDatos = snapshot.hasData && snapshot.data!.isNotEmpty;
+                
+                // Extraemos los datos o usamos valores por defecto (Genéricos)
+                final perfil = tieneDatos ? snapshot.data!.first : null;
+                
+                final nombreStream = perfil?['nombre'] ?? 'Sin nombre de usuario';
+                final avatarStream = perfil?['avatar_url'] ?? 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'; 
+                final rolStream = perfil?['rol'] ?? 'Invitado';
+
+                return Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 35,
+                          backgroundImage: NetworkImage(avatarStream),
+                          backgroundColor: Colors.grey[200],
+                          // Si la imagen falla, ponemos un icono por defecto
+                          onBackgroundImageError: (_, __) => const Icon(Icons.person),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                nombreStream,
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                rolStream,
+                                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Un indicador visual opcional de que está sincronizando (muy pequeño)
+                        if (snapshot.connectionState == ConnectionState.waiting)
+                          const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-          ),
-          const SizedBox(height: 10),
-          const Text("Proyecto de ecosistema digital para el Pascual Bravo."),
-          const Divider(height: 40),
+            const SizedBox(height: 25),
 
-          // Perfil
-          PerfilWidget(
-            nombre: nombre,
-            telefono: telefono,
-            contrasena: contrasena,
-            avatarUrl: avatarUrl,
-          ),
+            // --- REJILLA DE ACCIONES RÁPIDAS (Grid) ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0), // Para que no toque los bordes del celular
+              child: GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  crossAxisSpacing: 12, 
+                  mainAxisSpacing: 15,
+                  childAspectRatio: 0.72,
+                ),
+                children: [
+                  GridItemCuenta(
+                    icono: Icons.help_outline, 
+                    titulo: "Ayuda", 
+                    pagina: const help_page()
+                  ),
+                  GridItemCuenta(
+                    icono: Icons.description_outlined, 
+                    titulo: "Términos", 
+                    pagina: const documentation_page()
+                  ),
+                  GridItemCuenta(
+                    icono: Icons.shopping_bag_outlined, 
+                    titulo: "Pedidos", 
+                    pagina: const MisPedidosPage()
+                  ),
+                  GridItemCuenta(
+                    icono: Icons.account_circle_outlined, 
+                    titulo: "Mi Cuenta", 
+                    pagina: const MiCuentaPage()
+                  ),
+                ],
+              ),
+            ),
 
-          const SizedBox(height: 20),
+            const SizedBox(height: 30),
 
-          // Botón Ayuda
-          _botonMenu(
-            context,
-            "Ayuda y contacto",
-            Icons.help_outline,
-            const help_page(),
-          ),
+            // --- SECCIÓN DE GESTIÓN ---)
+            const Text(
+              "Gestión de Negocio",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 15),
 
-          const SizedBox(height: 20),
+            // Botón Panel de Negocio
+            LargeCardCuenta(
+              titulo: "Panel de Negocio",
+              icono: Icons.admin_panel_settings_outlined,
+              colorIcono: const Color.fromRGBO(0, 180, 195, 1),
+              pagina: const admin_neg_page(),
+            ),
 
-          // Botón Términos
-          _botonMenu(
-            context,
-            "Términos y condiciones",
-            Icons.description,
-            const documentation_page(),
-          ),
+            const SizedBox(height: 15),
 
-          const SizedBox(height: 20),
+            // Botón Pedidos del Negocio
+            LargeCardCuenta(
+              titulo: "Pedidos del Negocio",
+              icono: Icons.receipt_long_outlined,
+              colorIcono: const Color.fromRGBO(0, 180, 195, 1),
+              pagina: const pedidos_neg_page(),
+            ),
 
-          // Botón Panel Admin (solo para negocios)
-          _botonMenu(
-            context,
-            "Panel de Negocio",
-            Icons.admin_panel_settings_outlined,
-            const admin_neg_page(),
-          ),
+            const SizedBox(height: 30),
 
-          const SizedBox(height: 20),
-          
-          _botonMenu(
-            context,
-            "Ver Pedidos",
-            Icons.shopping_cart_outlined,
-            const pedidos_neg_page(),
-          ),
-
-          const SizedBox(height: 20),
-
-
-
-          const SizedBox(height: 20),
-          // --- SECCIÓN DINÁMICA DE LOGIN / LOGOUT ---
-          StreamBuilder<AuthState>(
-            stream: Supabase.instance.client.auth.onAuthStateChange,
-            builder: (context, snapshot) {
-              final session = snapshot.data?.session;
-              final bool isLoggedIn = session != null;
-
-              return isLoggedIn
-                  ? _botonCerrarSesion(context)
-                  : _botonIniciarSesion(context);
-            },
-          ),
-        ],
+            // --- BOTÓN DE SESIÓN DINÁMICO ---
+            StreamBuilder<AuthState>(
+              stream: Supabase.instance.client.auth.onAuthStateChange,
+              builder: (context, snapshot) {
+                final session = snapshot.data?.session;
+                return (session != null) 
+                  ? BotonLogoutDiDi(onLogout: _cargarDatos)
+                  : BotonLoginDiDi(loginPage: const login_page());
+              },
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
       ),
     );
   }
 
-  // Botón Iniciar Sesión
-  Widget _botonIniciarSesion(BuildContext context) {
-    return ElevatedButton.icon(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const login_page()),
-          
-        );
-        setState(() {});
-      },
-      style: ElevatedButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 20),
-      ),
-      icon: const Icon(Icons.login),
-      label: const Text("Iniciar Sesión"),
-    );
-  }
 
-  // Botón Cerrar Sesión
-  Widget _botonCerrarSesion(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: () async {
-        try {
-          // 1. Intentamos borrar el token (con un timeout para que no bloquee)
-          final token = await FirebaseMessaging.instance.getToken().timeout(
-            const Duration(seconds: 2), 
-            onTimeout: () => null,
-          );
-          
-          if (token != null) {
-            await Supabase.instance.client
-                .from('fcm_tokens')
-                .delete()
-                .eq('token', token);
-          }
-        } catch (e) {
-          print("Error silencioso al borrar token: $e");
-        }
-          await Supabase.instance.client.auth.signOut();
-        _cargarDatos(); // Limpiamos los datos al cerrar sesión
-        setState(() {}); // Forzar actualización de UI después de cerrar sesión
-      },
-      style: OutlinedButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        foregroundColor: Colors.redAccent,
-        side: const BorderSide(color: Colors.redAccent),
-        padding: const EdgeInsets.symmetric(vertical: 20),
-      ),
-      icon: const Icon(Icons.logout),
-      label: const Text("Cerrar Sesión"),
-    );
-  }
-
-  // Botón auxiliar
-  Widget _botonMenu(
-      BuildContext context, String titulo, IconData icono, Widget pagina) {
-    return ElevatedButton.icon(
-      onPressed: () =>
-          Navigator.push(context, MaterialPageRoute(builder: (context) => pagina)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        padding: const EdgeInsets.symmetric(vertical: 20),
-      ),
-      icon: Icon(icono),
-      label: Text(titulo),
-    );
-  }
 }

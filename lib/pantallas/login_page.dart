@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pbshop/main.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:pbshop/pantallas/home_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
