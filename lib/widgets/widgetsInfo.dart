@@ -64,6 +64,88 @@ class GridItemCuenta extends StatelessWidget {
   }
 }
 
+class LargeCardAction extends StatelessWidget {
+  final String titulo;
+  final String subtitulo;
+  final IconData icono;
+  final Color colorPrincipal;
+  final VoidCallback onTap;
+  final bool isLoading;
+
+  const LargeCardAction({
+    super.key,
+    required this.titulo,
+    required this.subtitulo,
+    required this.icono,
+    required this.onTap,
+    this.colorPrincipal = Colors.red, // Rojo por defecto para eliminar
+    this.isLoading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: colorPrincipal.withOpacity(0.2), width: 1.5),
+      ),
+      color: colorPrincipal.withOpacity(0.05),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: isLoading ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Row(
+            children: [
+              // Círculo del icono dinámico
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorPrincipal.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icono, color: colorPrincipal, size: 28),
+              ),
+              const SizedBox(width: 15),
+              // Textos descriptivos
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titulo,
+                      style: TextStyle(
+                        color: colorPrincipal,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      subtitulo,
+                      style: TextStyle(
+                        color: colorPrincipal.withOpacity(0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isLoading)
+                const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
+                )
+              else
+                Icon(Icons.arrow_forward_ios, color: colorPrincipal, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 // Widget para las tarjetas largas (Panel de Negocio)
 class LargeCardCuenta extends StatelessWidget {
   final String titulo;

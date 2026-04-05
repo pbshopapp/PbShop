@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pbshop/widgets/widgetsInfo.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/ObtenerDatosUser.dart';
 
@@ -132,29 +133,74 @@ class _MiCuentaPageState extends State<MiCuentaPage> {
             ),
             
             const SizedBox(height: 20),
+
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.red.shade100, width: 1.5),
+              ),
+              color: Colors.red.withOpacity(0.05), // Un fondo suave rojizo
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: _isLoading ? null : _mostrarDialogoConfirmacion,
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Row(
+                    children: [
+                      // Círculo del icono
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.delete_forever, color: Colors.red, size: 28),
+                      ),
+                      const SizedBox(width: 15),
+                      // Textos
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Eliminar mi cuenta",
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              "Esta acción no se puede deshacer",
+                              style: TextStyle(
+                                color: Colors.red.shade300,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios, color: Colors.red, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            if (_isLoading) ...[
+              const SizedBox(height: 15),
+              const CircularProgressIndicator(color: Colors.red),
+            ],
+
+            const SizedBox(height: 20),
+
             const Text(
               "Gestiona tus datos y privacidad. Recuerda que eliminar tu cuenta es una acción permanente.",
               style: TextStyle(color: Colors.grey, fontSize: 14),
               textAlign: TextAlign.center,
             ),
 
-            const Spacer(), // Empuja el botón de eliminar hacia abajo
-            const Divider(),
-
-            ListTile(
-              onTap: _mostrarDialogoConfirmacion,
-              leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text(
-                "Eliminar mi cuenta", 
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)
-              ),
-              subtitle: const Text("Borra todos tus datos de PB-Shop de forma definitiva"),
-            ),
-
-            if (_isLoading) ...[
-              const SizedBox(height: 10),
-              const CircularProgressIndicator(),
-            ],
             const SizedBox(height: 20),
           ],
         ),

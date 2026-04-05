@@ -107,23 +107,27 @@ async function enviarAFirebase(fcmToken: string, title: string, body: string, da
     },
     body: JSON.stringify({
       message: {
-        token: fcmToken,
-        notification: { title, body },
-        android: {
-          priority: "high",
-          notification: {
-            channel_id: "pbshop_canal_final",
-            sound: "noti",
-            click_action: "FLUTTER_NOTIFICATION_CLICK",
-            notification_priority: "PRIORITY_MAX",
-          }
-        },
-        data: { 
-          //title: title, // Mandamos el título como dato
-          //body: body,   // Mandamos el cuerpo como dato
-          ...dataExtra, // <--- AQUÍ SE INCLUYEN screen E id_pedido
-          click_action: "FLUTTER_NOTIFICATION_CLICK"
-        }, 
+          token: fcmToken,
+          // 1. ELIMINAMOS EL BLOQUE ANDROID NOTIFICATION
+          android: {
+            priority: "high",
+            // Comenta o borra este bloque 'notification' interno:
+            /* notification: {
+              channel_id: "pbshop_canal_final",
+              sound: "campana",
+              click_action: "FLUTTER_NOTIFICATION_CLICK",
+              notification_priority: "PRIORITY_MAX",
+            } 
+            */
+          },
+          // 2. TODO VIAJA AQUÍ
+          data: { 
+            title: title, 
+            body: body,   
+            sound: "campana", // <--- Agregamos esto aquí para que Flutter lo lea
+            ...dataExtra, 
+            click_action: "FLUTTER_NOTIFICATION_CLICK"
+          }, 
       },
     }),
   })

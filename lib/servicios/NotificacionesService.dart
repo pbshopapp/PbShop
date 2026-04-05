@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:pbshop/pantallas/detalles_pedido_dinamico.dart';
-import 'package:pbshop/main.dart';
+import 'package:pbshop/main.dart'; // Asegúrate de que aquí esté definido el navigatorKey
 import 'package:pbshop/pantallas/home_page.dart';
 import 'package:pbshop/pantallas/pedidos_neg_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,26 +11,19 @@ import 'dart:typed_data';
 
 class NotificacionesService {
   static final _plugin = FlutterLocalNotificationsPlugin();
-  
- static Future<void> configurarFirebase() async {
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-  RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+  static Future<void> configurarFirebase() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-  if (initialMessage != null) {
-    print("App abierta desde CERRADO con data: ${initialMessage.data}");
-    // Agregamos un pequeño delay para dar tiempo a que el Navigator esté listo
-    Future.delayed(const Duration(seconds: 1), () {
-      _manejarClic(initialMessage.data);
-    });
-  }
+    // 1. Manejar mensaje inicial (App cerrada totalmente)
+    RemoteMessage? initialMessage = await messaging.getInitialMessage();
+    if (initialMessage != null) {
+      Future.delayed(const Duration(seconds: 1), () {
+        _manejarClic(initialMessage.data);
+      });
+    }
 
-  // 2. ESCUCHAR CUANDO LA APP ESTÁ EN SEGUNDO PLANO
-  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    print("App abierta desde SEGUNDO PLANO con data: ${message.data}");
-    _manejarClic(message.data);
-  });
-  // 1. Solicitar permisos
+    // 2. Solicitar permisos (Indispensable para Android 13+)
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       badge: true,
@@ -38,7 +31,7 @@ class NotificacionesService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // 1. REGISTRO DEL TOKEN (Lógica de red)
+      // 3. Registro del Token en Supabase
       try {
         String? token = await messaging.getToken().timeout(
           const Duration(seconds: 5),
@@ -46,57 +39,50 @@ class NotificacionesService {
         );
 
         if (token != null) {
-          print("TOKEN DE FIREBASE: $token");
           final userId = Supabase.instance.client.auth.currentUser?.id;
-
           if (userId != null) {
             await Supabase.instance.client.from('fcm_tokens').upsert({
               'usuario_id': userId,
               'token': token,
             }, onConflict: 'token');
-            print("Token registrado exitosamente en fcm_tokens");
           }
         }
       } catch (e) {
-        print("Error al procesar el token: $e");
+        debugPrint("Error registrando token: $e");
       }
 
-      // 2. CONFIGURACIÓN DE ESCUCHA (Fuera del bloque del token)
-      // Esto debe ejecutarse SIEMPRE que haya permisos, funcione el token o no.
-      
-      // App abierta
+      // 4. ESCUCHA ACTIVA: App en primer plano (Foreground)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        if (message.notification != null) {
-          mostrar(
-            message.notification!.title ?? '',
-            message.notification!.body ?? '',
-            message.data, 
-          );
-        }
+        // IMPORTANTE: Leemos de 'data' porque 'notification' viene nulo desde la Edge Function
+        final String titulo = message.data['title'] ?? 'Nuevo aviso de PB-Shop';
+        final String cuerpo = message.data['body'] ?? 'Revisa tu pedido ahora';
+        
+        mostrar(titulo, cuerpo, message.data);
       });
 
-      // App en segundo plano (clic)
+      // 5. ESCUCHA ACTIVA: App en segundo plano (Clic en la notificación)
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        print("Notificación tocada: ${message.data}");
         _manejarClic(message.data);
       });
     }
   }
+
   static Future<void> inicializar() async {
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
 
     await _plugin.initialize(
       const InitializationSettings(android: android),
       onDidReceiveNotificationResponse: (NotificationResponse details) {
-        if (details.actionId == 'id_ver_pedido' && details.payload != null) {
-          // Ahora sí decodificamos tranquilos
+        // Manejo de botones de acción
+        if (details.payload != null) {
           final Map<String, dynamic> data = jsonDecode(details.payload!);
-          _manejarClic(data);
+          if (details.actionId == 'id_ver_pedido') {
+            _manejarClic(data);
+          }
         }
       },
     );
-    
-    // Solicitar permisos para Android 13+
+
     await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
   }
@@ -104,7 +90,7 @@ class NotificacionesService {
   static Future<void> mostrar(String titulo, String cuerpo, Map<String, dynamic> data) async {
     final String? tipo = data['tipo_alerta'];
     
-    // Configuramos la vibración solo si es URGENTE
+    // Vibración personalizada para urgencias
     final Int64List? patronVibracion = (tipo == "URGENTE") 
         ? Int64List.fromList([0, 1000, 500, 2000]) 
         : null;
@@ -115,65 +101,54 @@ class NotificacionesService {
         'Avisos de Pedidos PB-Shop',
         importance: Importance.max,
         priority: Priority.max,
-        fullScreenIntent: true,
-        sound: RawResourceAndroidNotificationSound('campana'),
+        sound: const RawResourceAndroidNotificationSound('campana'),
         vibrationPattern: patronVibracion,
         enableVibration: true,
-
-        additionalFlags: (tipo == "URGENTE") 
-            ? Int32List.fromList([4]) // El valor 4 es el código interno para 'Insistent' en Android
-            : null, // Solo repite si es listo
-
+        // Flag '4' hace que la notificación sea insistente (repite sonido hasta interactuar)
+        additionalFlags: (tipo == "URGENTE") ? Int32List.fromList([4]) : null,
         actions: <AndroidNotificationAction>[
-          AndroidNotificationAction(
+          const AndroidNotificationAction(
             'id_silenciar', 
-            'Solo Silenciar', 
-            cancelNotification: true, // Esto mata la vibración de una
-            showsUserInterface: false, // NO abre la app
+            'Silenciar', 
+            cancelNotification: true,
+            showsUserInterface: false,
           ),
-          AndroidNotificationAction(
+          const AndroidNotificationAction(
             'id_ver_pedido', 
             'Ver Pedido', 
             cancelNotification: true,
-            showsUserInterface: true, // SI abre la app
+            showsUserInterface: true,
           ),
         ],
       ),
     );
 
-    print("DEBUG: Intentando mostrar botones para tipo: $tipo");
-    if (tipo == "URGENTE") {
-      print("DEBUG: Configurando botones 'Silenciar' y 'Ver Pedido'");
-    }
     await _plugin.show(
       DateTime.now().millisecond, 
       titulo, 
       cuerpo, 
       detalles, 
-      payload: jsonEncode(data) // Pasamos toda la data
+      payload: jsonEncode(data)
     );
   }
   
   static DateTime? _ultimoClic;
   static void _manejarClic(Map<String, dynamic> data) {
     final ahora = DateTime.now();
-    if (_ultimoClic != null && ahora.difference(_ultimoClic!).inMilliseconds < 1000) {
-      return; 
-    }
+    if (_ultimoClic != null && ahora.difference(_ultimoClic!).inMilliseconds < 1000) return; 
     _ultimoClic = ahora;
+
     final String? screen = data['screen'];
     final String? idPedido = data['id_pedido'];
 
     if (navigatorKey.currentState == null) return;
 
-    print("DEBUG: Screen recibida: $screen"); // <--- MIRA ESTO EN LA CONSOLA
-
+    // Resetear al home y luego navegar al destino
     navigatorKey.currentState!.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const home_page()), // Esta es la nueva "base"
-      (route) => false, // Esto borra absolutamente todo el historial anterior
+      MaterialPageRoute(builder: (context) => const home_page()),
+      (route) => false,
     );
 
-    // 2. Encima del home, lanzamos la pantalla específica
     if (screen == "TENDERO") {
       navigatorKey.currentState!.push(
         MaterialPageRoute(builder: (context) => const pedidos_neg_page()),

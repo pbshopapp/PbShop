@@ -68,7 +68,7 @@ class CartaProducto extends StatelessWidget {
                           return Container(color: Colors.grey[200], child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
                         }
                         if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                          return CuadroDeImagenes(urls: snapshot.data!, mostrarFlechas: false, mostrarPuntos: true);
+                          return CuadroDeImagenes(urls: snapshot.data!, mostrarPuntos: true);
                         }
                         return Container(
                           color: Colors.grey[200],

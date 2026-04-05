@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/CartService.dart';
-import 'package:pbshop/pantallas/mis_pedidos_page.dart';
-import 'package:pbshop/servicios/PedidoService.dart';
+import 'package:intl/intl.dart';
+
 
 class car_page extends StatefulWidget {
   const car_page({super.key});
@@ -14,12 +14,23 @@ class car_page extends StatefulWidget {
 class _car_pageState extends State<car_page> {
   bool _isConfirming = false;
   final _cartService = CartService();
+  final f = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+  // Mapa para gestionar las notas de cada negocio de forma independiente
+  final Map<String, TextEditingController> _notaControllers = {};
 
-
-  // --- FUNCIÓN RESTAURADA: CONFIRMAR PEDIDO ---
-  Future<void> _confirmarPedido() async {
+  @override
+  void dispose() {
+    // Limpieza de controladores para evitar fugas de memoria
+    for (var controller in _notaControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+  
+  // --- FUNCIÓN ACTUALIZADA: CONFIRMAR PEDIDO POR TIENDA ---
+  Future<void> _confirmarPedidoPorTienda(String idNegocio, List<ItemCarrito> itemsDeEsteNegocio) async {
     final user = Supabase.instance.client.auth.currentUser;
-    if (user == null || _cartService.items.isEmpty) {
+    if (user == null) {
       _mostrarMensaje("Inicia sesión para pedir", Colors.orange);
       return;
     }
@@ -27,44 +38,42 @@ class _car_pageState extends State<car_page> {
     setState(() => _isConfirming = true);
 
     try {
-      // 1. AGRUPAR productos por negocio (fk_negocio)
-      final Map<String, List<ItemCarrito>> productosPorNegocio = {};
-      for (var item in _cartService.items) {
-        productosPorNegocio.putIfAbsent(item.fkNegocio, () => []).add(item);
-      }
+      // Calcular el total y obtener la nota específica de este negocio
+      double totalNegocio = itemsDeEsteNegocio.fold(0, (sum, item) => sum + item.total);
+      String notaTexto = _notaControllers[idNegocio]?.text ?? "";
 
-      // 2. ITERAR sobre cada grupo para crear un pedido por cada tienda
-      for (var entry in productosPorNegocio.entries) {
-        final String idNegocio = entry.key;
-        final List<ItemCarrito> itemsDeEsteNegocio = entry.value;
+      // 1. Insertar Cabecera en la tabla 'pedidos' incluyendo NOTAS
+      final pedido = await Supabase.instance.client.from('pedidos').insert({
+        'id_usuario': user.id,
+        'fk_negocio': idNegocio,
+        'total': totalNegocio,
+        'estado': 'pendiente',
+        'metodo_pago': 'efectivo',
+        'notas': notaTexto, // <--- Integración de notas
+      }).select().single();
 
-        // Calcular el total solo para este negocio
-        double totalNegocio = itemsDeEsteNegocio.fold(0, (sum, item) => sum + item.total);
+      // 2. Preparar Detalles
+      final detalles = itemsDeEsteNegocio.map((item) => {
+        'fk_pedido': pedido['id'],
+        'fk_producto': item.id,
+        'cantidad': item.cantidad,
+        'precio_unitario': item.precioUnitario,
+      }).toList();
 
-        // A. Insertar Cabecera para ESTE negocio
-        final pedido = await Supabase.instance.client.from('pedidos').insert({
-          'id_usuario': user.id,
-          'fk_negocio': idNegocio,
-          'total': totalNegocio,
-          'estado': 'pendiente',
-          'metodo_pago': 'efectivo',
-        }).select().single();
+      // 3. Insertar Detalles en la tabla 'detalles_pedido'
+      await Supabase.instance.client.from('detalles_pedido').insert(detalles);
 
-        // B. Preparar Detalles para este pedido específico
-        final detalles = itemsDeEsteNegocio.map((item) => {
-          'fk_pedido': pedido['id'],
-          'fk_producto': item.id,
-          'cantidad': item.cantidad,
-          'precio_unitario': item.precioUnitario,
-        }).toList();
+      // 4. ÉXITO: Limpiar los productos de esta tienda directamente desde aquí
+      setState(() {
+        // Accedemos a la lista de items del servicio y removemos los del negocio actual
+        _cartService.items.removeWhere((item) => item.fkNegocio == idNegocio);
+      });
 
-        // C. Insertar Detalles
-        await Supabase.instance.client.from('detalles_pedido').insert(detalles);
-      }
+      // Limpiar el controlador de texto de la nota
+      _notaControllers[idNegocio]?.clear();
 
-      // 3. Éxito Total
-      _cartService.limpiarCarrito();
-      _mostrarMensaje("¡Pedidos enviados con éxito a cada tienda!", Colors.green);
+      
+      _mostrarMensaje("¡Pedido enviado a la tienda!", Colors.green);
       
     } catch (e) {
       _mostrarMensaje("Error al procesar: $e", Colors.red);
@@ -80,32 +89,28 @@ class _car_pageState extends State<car_page> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Mi Carrito"), centerTitle: true),
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(title: const Text("Mi Carrito"), centerTitle: true, elevation: 0),
       body: ListenableBuilder(
         listenable: _cartService,
         builder: (context, _) {
           final items = _cartService.items;
 
-          return Column(
+          if (items.isEmpty) {
+            return const Center(child: Text("Tu carrito está vacío"));
+          }
+
+          // Agrupar los productos por negocio (fk_negocio)
+          final Map<String, List<ItemCarrito>> gruposPorTienda = {};
+          for (var item in items) {
+            gruposPorTienda.putIfAbsent(item.fkNegocio, () => []).add(item);
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(15),
             children: [
-              // 1. PANEL SUPERIOR RESTAURADO (Estado y Ver Más)
-              _buildPanelSuperiorRestaurado(),
-              
-              const Divider(height: 1),
-
-              // 2. LISTA CENTRAL
-              Expanded(
-                child: items.isEmpty
-                    ? const Center(child: Text("Tu carrito está vacío"))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(15),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) => _buildCardProducto(items[index], index),
-                      ),
-              ),
-
-              // 3. PANEL DE TOTAL Y BOTÓN DE ACCIÓN
-              _buildResumenTotal(items.isEmpty),
+              // Generar una sección visual por cada tienda
+              ...gruposPorTienda.entries.map((entry) => _buildSeccionTienda(entry.key, entry.value)),
             ],
           );
         },
@@ -113,149 +118,144 @@ class _car_pageState extends State<car_page> {
     );
   }
 
-  // --- WIDGETS RESTAURADOS ---
+  Widget _buildSeccionTienda(String idNegocio, List<ItemCarrito> itemsTienda) {
+    // Asegurar que exista un controlador para la nota de este negocio
+    _notaControllers.putIfAbsent(idNegocio, () => TextEditingController());
+    
+    double subtotal = itemsTienda.fold(0, (sum, item) => sum + item.total);
 
-  Widget _buildPanelSuperiorRestaurado() {
-    final user = Supabase.instance.client.auth.currentUser;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 20),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          // --- ENCABEZADO DINÁMICO CON NOMBRE DE TIENDA ---
+          FutureBuilder<Map<String, dynamic>>(
+            future: Supabase.instance.client
+                .from('negocios')
+                .select('nombre')
+                .eq('id', idNegocio)
+                .single(),
+            builder: (context, snapshot) {
+              String nombreTienda = "Cargando tienda...";
+              if (snapshot.hasData) {
+                nombreTienda = snapshot.data!['nombre'];
+              }
 
-    // Si no hay usuario, mostramos un panel simple o vacío en lugar de activar el Stream
-    if (user == null) {
-      return const SizedBox.shrink(); // O un banner que diga "Inicia sesión para ver tus pedidos"
-    }
-
-    return StreamBuilder<Map<String, dynamic>?>(
-      stream: PedidoService().getUltimoPedidoStream(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const ListTile(title: Text("Error al cargar pedidos"));
-        }
-        
-      // 2. Extraer el estado con un valor por defecto seguro
-        final data = snapshot.data;
-
-        // Este bloque es vital para evitar el error de "null value"
-        final estado = (data != null && data.containsKey('estado') && data['estado'] != null) 
-            ? data['estado'].toString().toLowerCase() 
-            : 'ninguno';
-
-        // Ahora tu lógica de colores ya no fallará porque 'estado' siempre será un String
-        Color colorEstado = const Color.fromRGBO(0, 180, 195, 1);
-        String mensaje = "No tienes pedidos recientes";
-        IconData icono = Icons.shopping_cart_outlined;
-
-        if(estado == 'pendiente') {
-          mensaje = "⏳ Tu pedido está pendiente";
-          colorEstado = Colors.orange;
-          icono = Icons.hourglass_empty;
-        } else if (estado == 'preparacion') {
-          mensaje = "👨‍🍳 ¡Tu pedido está siendo preparado!";
-          colorEstado = Colors.blue;
-          icono = Icons.restaurant;
-        } else if (estado == 'listo') {
-          mensaje = "✅ ¡Tu pedido está listo para recoger!";
-          colorEstado = Colors.green;
-          icono = Icons.doorbell;
-        } else if (estado == 'cancelado') {
-          mensaje = "❌ Pedido cancelado";
-          colorEstado = Colors.red;
-          icono = Icons.error_outline;
-        }
-
-        return InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const MisPedidosPage()),
-            );
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.1))),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Estado del pedido más reciente",
-                        style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        mensaje,
-                        style: TextStyle(
-                          color: colorEstado,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        "Ver todos los pedidos actuales",
-                        style: TextStyle(color: Colors.deepPurple, fontSize: 12, decoration: TextDecoration.underline),
-                      ),
-                    ],
-                  ),
+              return Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                 ),
-                // Botón circular estilo historial
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: colorEstado.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icono, color: colorEstado, size: 24),
+                child: Row(
+                  children: [
+                    const Icon(Icons.storefront, color: Color.fromRGBO(0, 180, 195, 1)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        nombreTienda, 
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              );
+            },
+          ),
+          
+          // Lista de productos de esta tienda específica
+          ...itemsTienda.map((item) {
+            int originalIndex = _cartService.items.indexOf(item);
+            return _buildCardProducto(item, originalIndex);
+          }),
+
+          // Campo de Notas para el pedido
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+            child: TextField(
+              controller: _notaControllers[idNegocio],
+              maxLines: 1,
+              decoration: InputDecoration(
+                hintText: "Notas para esta tienda (opcional)",
+                prefixIcon: const Icon(Icons.note_alt_outlined, size: 20),
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
             ),
           ),
-        );
-      },
+
+          // Resumen y Botón de Pago de la tienda
+          Padding(
+            padding: const EdgeInsets.all(15),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Subtotal tienda", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text(f.format(subtotal), 
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                  ],
+                ),
+                ElevatedButton(
+                  onPressed: _isConfirming ? null : () => _confirmarPedidoPorTienda(idNegocio, itemsTienda),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isConfirming 
+                    ? const SizedBox(height: 15, width: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text("Confirmar Pedido"),
+                )
+              ],
+            ),
+          )
+        ],
+      ),
     );
   }
 
+  // --- WIDGETS RESTAURADOS ---
+
   Widget _buildCardProducto(ItemCarrito item, int index) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      shape: RoundedRectangleBorder(side: BorderSide(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.nombre, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  Text("\$${item.precioUnitario} c/u", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                  const SizedBox(height: 8),
-                  Text("Total: \$${item.total}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                ],
-              ),
-            ),
-            // Controles de cantidad conectados al servicio profesional
-            Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _btnQty(Icons.remove, () => _cartService.cambiarCantidad(index, false)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text("${item.cantidad}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-                _btnQty(Icons.add, () => _cartService.cambiarCantidad(index, true)),
+                Text(item.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                Text("${f.format(item.precioUnitario)} c/u", 
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12)),
               ],
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-              onPressed: () => _cartService.eliminarProducto(index),
-            ),
-          ],
-        ),
+          ),
+          Row(
+            children: [
+              _btnQty(Icons.remove, () => _cartService.cambiarCantidad(index, false)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text("${item.cantidad}", style: const TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              _btnQty(Icons.add, () => _cartService.cambiarCantidad(index, true)),
+            ],
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+            onPressed: () => _cartService.eliminarProducto(index),
+          ),
+        ],
       ),
     );
   }
@@ -265,43 +265,8 @@ class _car_pageState extends State<car_page> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-        child: Icon(icon, size: 18),
-      ),
-    );
-  }
-
-  Widget _buildResumenTotal(bool estaVacio) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text("Total a pagar:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Text("\$${_cartService.granTotal}", 
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color.fromRGBO(0, 180, 195, 1))),
-            ],
-          ),
-          const SizedBox(height: 15),
-          ElevatedButton(
-            onPressed: (_isConfirming || estaVacio) ? null : _confirmarPedido,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 55),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-            ),
-            child: _isConfirming 
-              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Text("Confirmar Pedido", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ),
-        ],
+        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(6)),
+        child: Icon(icon, size: 16),
       ),
     );
   }

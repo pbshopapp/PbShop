@@ -5,6 +5,19 @@ import 'servicios/NotificacionesService.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Extraer datos del mapa 'data' (del index.ts de Supabase)
+  final String titulo = message.data['title'] ?? 'Aviso de PB-Shop';
+  final String cuerpo = message.data['body'] ?? 'Tienes una actualización';
+
+  // Usamos el método estático de tu servicio que ya tiene los botones y la campana
+  await NotificacionesService.mostrar(titulo, cuerpo, message.data);
+}
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -14,6 +27,8 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // 1. Definimos el canal de "Alta Importancia"
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -22,7 +37,7 @@ Future<void> main() async {
     description: 'Este canal se usa para avisos urgentes de los pedidos.',
     importance: Importance.max, // <--- CLAVE PARA EL POP-UP
     playSound: true,
-    sound: RawResourceAndroidNotificationSound('noti'),
+    sound: RawResourceAndroidNotificationSound('campana'),
   );
 
   // 2. Registramos el canal en el sistema Android
