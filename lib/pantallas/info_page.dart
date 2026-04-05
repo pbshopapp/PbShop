@@ -1,9 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/mis_pedidos_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-
 // Tus imports existentes
 import 'package:pbshop/pantallas/documentation_page.dart';
 import 'package:pbshop/pantallas/help_page.dart';

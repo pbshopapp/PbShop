@@ -120,29 +120,28 @@ Widget build(BuildContext context) {
   }
 
   return Scaffold(
-    backgroundColor: Colors.grey[100], // Fondo gris claro para que las tarjetas blancas resalten
+    backgroundColor: const Color(0xFFF8F9FA), // Fondo gris claro para que las tarjetas blancas resalten
       appBar: AppBar(
+        elevation: 0,
+        backgroundColor: const Color.fromRGBO(0, 180, 195, 1), // Fondo blanco para mayor claridad
+        foregroundColor: const Color.fromARGB(255, 255, 255, 255), // Iconos y texto en negro
         title: _estaBuscando 
           ? TextField(
               controller: _searchController,
               autofocus: true,
-              style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                hintText: "Buscar pedido o cliente...",
-                hintStyle: TextStyle(color: Colors.white70),
+                hintText: "Buscar pedido...",
                 border: InputBorder.none,
               ),
-              onChanged: (val) {
-                setState(() => _textoBusqueda = val.toLowerCase());
-              },
+              onChanged: (val) => setState(() => _textoBusqueda = val.toLowerCase()),
             )
-          : const Text("PEDIDOS PENDIENTES", style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
-        foregroundColor: Colors.white,
+          : const Text(
+              "Pedidos", 
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24)
+            ),
         actions: [
           IconButton(
-            icon: Icon(_estaBuscando ? Icons.close : Icons.search),
+            icon: Icon(_estaBuscando ? Icons.close : Icons.search_rounded),
             onPressed: () {
               setState(() {
                 _estaBuscando = !_estaBuscando;
@@ -156,30 +155,23 @@ Widget build(BuildContext context) {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
-            child: Container(
-              height: 45,
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: TabBar(
-                controller: _tabController,
-                indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: const Color.fromRGBO(0, 180, 195, 1),
-                unselectedLabelColor: Colors.white,
-                indicator: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.white,
-                ),
-                tabs: const [
-                  Tab(text: "Pendientes"),
-                  Tab(text: "En Proceso"),
-                  Tab(text: "Listos"),
-                ],
-              ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TabBar(
+              controller: _tabController,
+              isScrollable: true, // Permite que los tabs no se amontonen
+              tabAlignment: TabAlignment.start,
+              indicatorColor: const Color.fromARGB(255, 255, 255, 255),
+              indicatorWeight: 3,
+              indicatorSize: TabBarIndicatorSize.label,
+              labelColor: Colors.black,
+              unselectedLabelColor: const Color.fromARGB(255, 255, 255, 255),
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              tabs: const [
+                Tab(text: "Pendientes"),
+                Tab(text: "En Proceso"),
+                Tab(text: "Listos"),
+              ],
             ),
           ),
         ),
@@ -199,8 +191,8 @@ Widget build(BuildContext context) {
 
   Widget _buildListaPedidos(String estadoFiltro) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _supabase
-          .from('pedidos')
+        stream: _supabase
+          .from('pedidos_detallados') // <--- Usa la vista, no la tabla
           .stream(primaryKey: ['id'])
           .eq('fk_negocio', _idNegocio!)
           .order('fecha', ascending: true),
@@ -217,14 +209,14 @@ Widget build(BuildContext context) {
         final pedidosFiltrados = snapshot.data!.where((pedido) {
           final coincideEstado = pedido['estado'].toString().toLowerCase() == estadoFiltro;
           
-          // Si no hay texto en el buscador, solo filtramos por estado
           if (_textoBusqueda.isEmpty) return coincideEstado;
 
-          // Si hay texto, buscamos en el ID del pedido o el nombre (si lo tienes en el map)
+          // Búsqueda por ID o por Nombre del Cliente
           final idPedido = pedido['id'].toString().toLowerCase();
-          // Nota: Para buscar por nombre de cliente, el pedido debería traer el nombre del perfil
-          // Si no lo trae, el ID es lo más seguro por ahora.
-          final coincideBusqueda = idPedido.contains(_textoBusqueda);
+          final nombreCliente = (pedido['nombre_cliente'] ?? "").toString().toLowerCase();
+
+          final coincideBusqueda = idPedido.contains(_textoBusqueda) || 
+                                  nombreCliente.contains(_textoBusqueda);
 
           return coincideEstado && coincideBusqueda;
         }).toList();
@@ -243,147 +235,182 @@ Widget build(BuildContext context) {
   }
 
   Widget _buildCardPedido(Map<String, dynamic> pedido) {
-  // Lógica para determinar si es urgente (ej. más de 20 min esperando en pendiente)
-  DateTime fechaPedido = DateTime.parse(pedido['fecha']);
-  Duration diferencia = DateTime.now().difference(fechaPedido);
-  bool esUrgent = diferencia.inMinutes > 20 && pedido['estado'] == 'pendiente';
-  
-  // Formatear la fecha/hora
-  String horaFormateada = DateFormat('jm').format(fechaPedido.toLocal());
+    DateTime fechaPedido = DateTime.parse(pedido['fecha']);
+    Duration diferencia = DateTime.now().difference(fechaPedido);
+    bool esUrgent = diferencia.inMinutes > 20 && pedido['estado'] == 'pendiente';
+    String horaFormateada = DateFormat('jm').format(fechaPedido.toLocal());
 
-  return Card(
-    margin: const EdgeInsets.only(bottom: 15),
-    elevation: 2,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    child: Column(
-      children: [
-        // Franja superior de urgencia
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-          decoration: BoxDecoration(
-            color: esUrgent ? Colors.red[400] : Colors.amber[400],
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(esUrgent ? "URGENTE" : "NORMAL", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              Text("Hace ${diferencia.inMinutes} min ($horaFormateada)", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-            ],
-          ),
-        ),
-        
-        Padding(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Column(
+          children: [
+            // Header de la tarjeta con Badge de tiempo
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("Pedido #${pedido['id'].toString().substring(0, 5)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text("\$${(pedido['total'] as num).toInt()}", style: const TextStyle(fontSize: 18, color: Color.fromRGBO(0, 180, 195, 1), fontWeight: FontWeight.bold)),
-                ],
-              ),
-              const SizedBox(height: 5),
-              
-              // FutureBuilder para obtener el nombre del cliente
-              FutureBuilder<String>(
-                future: _pedidoService.obtenerNombreCliente(pedido['id_usuario']),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Text("Cargando cliente...", style: TextStyle(color: Colors.grey, fontSize: 13));
-                  }
-                  final nombre = snapshot.data ?? "Cliente desconocido";
-                  return Text(
-                    "Cliente: $nombre",
-                    style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontSize: 14),
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
-              const Divider(),
-              const SizedBox(height: 10),
-              
-              // Sección de productos
-              Row(
-                children: [
-                  const Icon(Icons.shopping_basket_outlined, color: Colors.grey),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _supabase
-                          .from('detalles_pedido')
-                          .select('cantidad, productos(nombre)')
-                          .eq('fk_pedido', pedido['id']),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Text("Cargando...", style: TextStyle(fontSize: 12, color: Colors.grey));
-                        }
-                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          return const Text("Sin productos", style: TextStyle(fontSize: 12, color: Colors.grey));
-                        }
-
-                        final detalles = snapshot.data!;
-                        String resumen = detalles.map((d) {
-                          final nombre = d['productos']['nombre'];
-                          final cant = d['cantidad'];
-                          return "${cant}x $nombre";
-                        }).join(", ");
-
-                        return Text(
-                          resumen,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(5)),
-                    child: Text(
-                      pedido['metodo_pago'].toString().toUpperCase(), 
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)
-                    ),
-                  )
-                ],
-              ),
-              
-              const SizedBox(height: 15),
-              
-              // --- BOTONES DE ACCIÓN INTEGRADOS ---
-              Row(
-                children: [
-                  // Botón de Acción Principal + Cancelar (Flex 3 para darles prioridad)
-                  Expanded(
-                    flex: 3,
-                    child: _buildBotonAccionPrincipal(pedido),
-                  ),
-                  const SizedBox(width: 8),
-                  // Botón de Detalles (Flex 1)
-                  Expanded(
-                    flex: 1,
-                    child: OutlinedButton(
-                      onPressed: () => _mostrarDetallesPedido(pedido),
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.zero, // Para que el texto quepa bien
-                        side: const BorderSide(color: Color.fromRGBO(0, 180, 195, 1)),
-                        foregroundColor: const Color.fromRGBO(0, 180, 195, 1),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Pedido #${pedido['id'].toString().substring(0, 5).toUpperCase()}",
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                       ),
-                      child: const Text("Detalles", style: TextStyle(fontSize: 12)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.access_time, size: 14, color: esUrgent ? Colors.red : Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            "Hace ${diferencia.inMinutes} min ($horaFormateada)",
+                            style: TextStyle(color: esUrgent ? Colors.red : Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: esUrgent ? Colors.red[50] : Colors.teal[50],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      esUrgent ? "URGENTE" : "NORMAL",
+                      style: TextStyle(
+                        color: esUrgent ? Colors.red[700] : Colors.teal[700],
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ],
-              )
-            ],
-          ),
+              ),
+            ),
+
+            const Divider(height: 1, indent: 16, endIndent: 16),
+
+            // Cuerpo: Información del Cliente y Productos
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Nombre del Cliente con Avatar Genérico
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: const Color.fromRGBO(0, 180, 195, 0.1),
+                        child: const Icon(Icons.person, size: 14, color: Color.fromRGBO(0, 180, 195, 1)),
+                      ),
+                      const SizedBox(width: 8),
+                      FutureBuilder<String>(
+                        future: _pedidoService.obtenerNombreCliente(pedido['id_usuario']),
+                        builder: (context, snapshot) {
+                          return Text(
+                            snapshot.data ?? "Cargando...",
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          );
+                        },
+                      ),
+                      const Spacer(),
+                      Text(
+                        "\$${(pedido['total'] as num).toInt()}",
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+
+                  // Lista de productos compacta
+                  FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _supabase
+                        .from('detalles_pedido')
+                        .select('cantidad, productos(nombre)')
+                        .eq('fk_pedido', pedido['id']),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return const SizedBox();
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: snapshot.data!.map((d) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey[300]!),
+                            ),
+                            child: Text(
+                              "${d['cantidad']}x ${d['productos']['nombre']}",
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            // Botones de Acción con estilo moderno
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                children: [
+                  // Botón Cancelar (Icono sutil)
+                  if (pedido['estado'] != 'entregado')
+                    Material(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(12),
+                      child: IconButton(
+                        onPressed: () => _confirmarCancelacion(pedido['id']),
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                  const SizedBox(width: 12),
+                  
+                  // Botón Principal
+                  Expanded(child: _crearBotonSegunEstado(pedido['estado'], pedido['id'])),
+                  
+                  const SizedBox(width: 12),
+
+                  // Botón Detalles
+                  Material(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    child: IconButton(
+                      onPressed: () => _mostrarDetallesPedido(pedido),
+                      icon: const Icon(Icons.remove_red_eye_outlined, color: Colors.black54),
+                      constraints: const BoxConstraints(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
-}
+      ),
+    );
+  }
 
   Widget _buildEstadoVacio(String mensaje) {
     return Center(
@@ -423,7 +450,7 @@ Widget build(BuildContext context) {
     );
   }
   // Define qué botón mostrar según el estado actual
-  Widget _buildBotonAccionPrincipal(Map<String, dynamic> pedido) {
+  /*Widget _buildBotonAccionPrincipal(Map<String, dynamic> pedido) {
     String estado = pedido['estado'];
     String id = pedido['id'];
 
@@ -446,29 +473,35 @@ Widget build(BuildContext context) {
         ),
       ],
     );
-  }
+  }*/
 
   // Método auxiliar para limpiar el switch anterior
   Widget _crearBotonSegunEstado(String estado, String id) {
+    Color color;
+    String texto;
+    
     if (estado == "pendiente") {
-      return ElevatedButton(
-        onPressed: () => _actualizarEstado(id, "preparacion"),
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[600], foregroundColor: Colors.black),
-        child: const Text("Preparar"),
-      );
+      color = Colors.orange[400]!;
+      texto = "PREPARAR";
     } else if (estado == "preparacion") {
-      return ElevatedButton(
-        onPressed: () => _actualizarEstado(id, "listo"),
-        style: ElevatedButton.styleFrom(backgroundColor: const Color.fromRGBO(0, 180, 195, 1), foregroundColor: Colors.white),
-        child: const Text("Listo"),
-      );
+      color = const Color.fromRGBO(0, 180, 195, 1);
+      texto = "LISTO";
     } else {
-      return ElevatedButton(
-        onPressed: () => _actualizarEstado(id, "entregado"),
-        style: ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 0, 153, 25), foregroundColor: Colors.white),
-        child: const Text("Entregado"),
-      );
+      color = Colors.green[600]!;
+      texto = "ENTREGAR";
     }
+
+    return ElevatedButton(
+      onPressed: () => _actualizarEstado(id, estado == "pendiente" ? "preparacion" : (estado == "preparacion" ? "listo" : "entregado")),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size(double.infinity, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      child: Text(texto, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+    );
   }
 
   // Ejemplo simple de cómo mostrar detalles (puedes crear una página nueva)

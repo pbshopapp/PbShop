@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pbshop/servicios/ObtenerDatosUser.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PerfilWidget extends StatefulWidget {
   final String nombre;
@@ -55,7 +54,7 @@ class _PerfilWidgetState extends State<PerfilWidget> {
         if (columna == 'telefono') _telefonoLocal = valor;
       });
       widget.onActualizar(); // Notificar a la pantalla para recargar datos
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("${columna[0].toUpperCase()}${columna.substring(1)} actualizado")),
       );

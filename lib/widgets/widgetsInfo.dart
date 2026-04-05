@@ -34,7 +34,7 @@ class GridItemCuenta extends StatelessWidget {
               borderRadius: BorderRadius.circular(15),
               boxShadow: [
                 const BoxShadow(
-                  color: Color.fromRGBO(0, 0, 0, 0.04), // Sombra más suave y profesional
+                  color: Color.fromRGBO(0, 0, 0, 0.04), 
                   blurRadius: 10,
                   offset: Offset(0, 4),
                 )
@@ -42,8 +42,8 @@ class GridItemCuenta extends StatelessWidget {
             ),
             child: Icon(
               icono, 
-              color: const Color.fromARGB(255, 27, 27, 27), // Tu color turquesa
-              size: 30, // Icono un poco más grande
+              color: const Color.fromARGB(255, 27, 27, 27), 
+              size: 30, 
             ),
           ),
           const SizedBox(height: 10),
