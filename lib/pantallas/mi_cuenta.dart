@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:pbshop/widgets/widgetsInfo.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/ObtenerDatosUser.dart';
 

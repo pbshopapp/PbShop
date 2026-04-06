@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/mis_pedidos_page.dart';
+import 'package:pbshop/pantallas/configurar_neg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 // Tus imports existentes
 import 'package:pbshop/pantallas/documentation_page.dart';
@@ -18,6 +19,37 @@ class info_page extends StatefulWidget {
   State<info_page> createState() => _InfoPageState();
 }
 
+class PanelCargaWrapper extends StatelessWidget {
+  const PanelCargaWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+
+    return FutureBuilder(
+      future: Supabase.instance.client
+          .from('perfiles')
+          .select('fk_negocio')
+          .eq('id', userId ?? '')
+          .single(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        final idNegocio = snapshot.data?['fk_negocio'];
+
+        if (idNegocio == null) {
+          return const Scaffold(
+            body: Center(child: Text("Tu cuenta no está vinculada a ningún negocio.")),
+          );
+        }
+
+        return ConfigurarNegocioPage(idNegocio: idNegocio);
+      },
+    );
+  }
+}
 class _InfoPageState extends State<info_page> {
   String nombre = "Usuario no registrado";
   String telefono = "********";
@@ -174,10 +206,20 @@ class _InfoPageState extends State<info_page> {
 
             // Botón Panel de Negocio
             LargeCardCuenta(
-              titulo: "Panel de Negocio",
+              titulo: "Administrar productos Negocio",
               icono: Icons.admin_panel_settings_outlined,
               colorIcono: const Color.fromRGBO(0, 180, 195, 1),
               pagina: const admin_neg_page(),
+            ),
+            
+
+            const SizedBox(height: 15),
+
+            LargeCardCuenta(
+              titulo: "Configurar Negocio",
+              icono: Icons.settings_outlined,
+              colorIcono: const Color.fromRGBO(0, 180, 195, 1),
+              pagina: const PanelCargaWrapper(),
             ),
 
             const SizedBox(height: 15),

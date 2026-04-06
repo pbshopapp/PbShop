@@ -148,7 +148,7 @@ class _product_pageState extends State<product_page> {
         children: [
           Icon(Icons.storefront, size: 18, color: Colors.grey[600]),
           const SizedBox(width: 8),
-          const Text("Producto verificado por PB-Shop", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          Text("Vendido por ${widget.producto['nombre_negocio']}", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -192,7 +192,7 @@ class _product_pageState extends State<product_page> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text("¡Producto añadido!"),
-          backgroundColor: Colors.black87,
+          backgroundColor: const Color.fromARGB(221, 0, 112, 37),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         )
