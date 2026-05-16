@@ -62,7 +62,7 @@ class help_page extends StatelessWidget {
                   ),
                   _buildFAQItem(
                     "¿Cómo registro mi propio negocio?",
-                    "Dirígete a tu perfil y selecciona 'Convertirse en Vendedor' para empezar a vender tus productos en el campus.",
+                    "Dirígete a tu perfil y selecciona 'Convertirse en Vendedor' y llena los datos solicitados.",
                   ),
                 ],
               ),

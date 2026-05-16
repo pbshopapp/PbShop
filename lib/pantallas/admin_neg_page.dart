@@ -78,8 +78,8 @@ class _AdminNegPageState extends State<admin_neg_page> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Panel de Administración"),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).textTheme.bodyLarge?.color,
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -90,6 +90,7 @@ class _AdminNegPageState extends State<admin_neg_page> {
             const SizedBox(height: 30),
             const Divider(),
             const Text("Tus Productos Publicados", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 15),
             _buildListaProductos(),
           ],
         ),
@@ -97,7 +98,7 @@ class _AdminNegPageState extends State<admin_neg_page> {
     );
   }
 
- Widget _buildHeaderNegocio() {
+  Widget _buildHeaderNegocio() {
     return Stack(
       alignment: Alignment.topCenter,
       children: [
@@ -105,7 +106,7 @@ class _AdminNegPageState extends State<admin_neg_page> {
           margin: const EdgeInsets.only(top: 40),
           padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).scaffoldBackgroundColor,
             borderRadius: BorderRadius.circular(25),
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)],
           ),
@@ -121,9 +122,9 @@ class _AdminNegPageState extends State<admin_neg_page> {
               ElevatedButton.icon(
                 onPressed: () => _mostrarVentanaNuevoProducto(context),
                 icon: const Icon(Icons.add_rounded),
-                label: const Text("Publicar Producto", style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text("Publicar Producto", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white) ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+                  backgroundColor: const Color.fromARGB(255, 36, 167, 179),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   elevation: 0,
                 ),
@@ -131,12 +132,11 @@ class _AdminNegPageState extends State<admin_neg_page> {
             ],
           ),
         ),
-        // Foto de perfil flotante con borde
         Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 4),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+            boxShadow: [BoxShadow(color: const Color.fromARGB(255, 255, 255, 255).withOpacity(0.1), blurRadius: 10)],
           ),
           child: CircleAvatar(
             radius: 45,
@@ -148,270 +148,285 @@ class _AdminNegPageState extends State<admin_neg_page> {
   }
 
   Widget _buildListaProductos() {
-  return StreamBuilder<List<Map<String, dynamic>>>(
-    stream: _supabase.from('productos').stream(primaryKey: ['id']).eq('fk_negocio', datosNegocio!['id']),
-    builder: (context, snapshot) {
-      if (!snapshot.hasData) return const CircularProgressIndicator();
-      final productos = snapshot.data!;
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _supabase.from('productos').stream(primaryKey: ['id']).eq('fk_negocio', datosNegocio!['id']),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final productos = snapshot.data!;
 
-      return GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, // Dos columnas como en la tienda
-          childAspectRatio: 0.8,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-        ),
-        itemCount: productos.length,
-        itemBuilder: (context, index) {
-          return CartaProducto(
-            producto: productos[index],
-            esAdmin: true, // <--- ACTIVAMOS EL MODO ADMIN
-            onEdit: () => _mostrarVentanaEditarProducto(context, productos[index]),
-            onDelete: () => _confirmarEliminacion(productos[index]['id'], productos[index]['nombre']),
-          );
-        },
-      );
-    },
-  );
-}
-
-
-void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> producto) {
-  final nomController = TextEditingController(text: producto['nombre']);
-  final preController = TextEditingController(text: producto['precio'].toString());
-  final descController = TextEditingController(text: producto['descripcion'] ?? "");
-  String? categoriaEdit = producto['fk_categoria']?.toString();
-  
-  List<XFile> imagenesNuevasAEspera = [];
-  bool estaCargando = false;
-
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-    builder: (context) => StatefulBuilder(
-      builder: (context, setModalState) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 20, right: 20, top: 20
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.75, // Ajustado para evitar overflow
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
           ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+          itemCount: productos.length,
+          itemBuilder: (context, index) {
+            final prod = productos[index];
+            return Stack(
               children: [
-                const Text("Editar Producto", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 15),
-                
-                // --- SECCIÓN: IMÁGENES ACTUALES EN LA DB ---
-                const Text("Imágenes actuales (Toca para eliminar)", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 8),
-                FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _supabase.from('imagenes_producto').select().eq('fk_producto', producto['id']),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const LinearProgressIndicator();
-                    final fotosDB = snapshot.data!;
-                    if (fotosDB.isEmpty) return const Text("No hay imágenes guardadas");
+                // La carta base (le pasamos esAdmin: false para que no intente dibujar botones internos)
+                CartaProducto(
+                  producto: prod,
+                  esAdmin: false, 
+                ),
+                // Botones flotantes abajo a la derecha
+                Positioned(
+                  bottom: 10,
+                  right: 10,
+                  child: Row(
+                    children: [
+                      _botonAccion(
+                        icon: Icons.edit_outlined,
+                        color: const Color.fromARGB(255, 36, 167, 179),
+                        onTap: () => _mostrarVentanaEditarProducto(context, prod),
+                      ),
+                      const SizedBox(width: 8),
+                      _botonAccion(
+                        icon: Icons.delete_outline_rounded,
+                        color: const Color.fromARGB(255, 244, 67, 54),
+                        onTap: () => _confirmarEliminacion(prod['id'], prod['nombre']),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
-                    return SizedBox(
+  // Widget auxiliar para botones minimalistas
+  Widget _botonAccion({required IconData icon, required Color color, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.9),
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)],
+        ),
+        child: Icon(icon, size: 18, color: Colors.white),
+      ),
+    );
+  }
+
+  void _mostrarVentanaEditarProducto(BuildContext context, Map<String, dynamic> producto) {
+    final nomController = TextEditingController(text: producto['nombre']);
+    final preController = TextEditingController(text: producto['precio'].toString());
+    final descController = TextEditingController(text: producto['descripcion'] ?? "");
+    String? categoriaEdit = producto['fk_categoria']?.toString();
+    
+    List<XFile> imagenesNuevasAEspera = [];
+    bool estaCargando = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+              left: 20, right: 20, top: 20
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("Editar Producto", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 15),
+                  const Text("Imágenes actuales (Toca para eliminar)", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _supabase.from('imagenes_producto').select().eq('fk_producto', producto['id']),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return const LinearProgressIndicator();
+                      final fotosDB = snapshot.data!;
+                      if (fotosDB.isEmpty) return const Text("No hay imágenes guardadas");
+
+                      return SizedBox(
+                        height: 80,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: fotosDB.length,
+                          itemBuilder: (context, index) {
+                            final foto = fotosDB[index];
+                            return Stack(
+                              children: [
+                                Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  width: 70,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    image: DecorationImage(image: NetworkImage(foto['url']), fit: BoxFit.cover),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 0, right: 5,
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      await ProductosService().eliminarImagenCompleto(foto['id'].toString(), foto['url']);
+                                      setModalState(() {}); 
+                                    },
+                                    child: const CircleAvatar(radius: 10, backgroundColor: Colors.red, child: Icon(Icons.close, size: 12, color: Colors.white)),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 30),
+                  TextField(controller: nomController, decoration: const InputDecoration(labelText: "Nombre", border: OutlineInputBorder())),
+                  const SizedBox(height: 10),
+                  TextField(controller: descController, maxLines: 2, decoration: const InputDecoration(labelText: "Descripción", border: OutlineInputBorder())),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: categoriaEdit,
+                    items: categorias.map((cat) => DropdownMenuItem(value: cat['id'].toString(), child: Text(cat['nombre']))).toList(),
+                    onChanged: (val) => setModalState(() => categoriaEdit = val),
+                    decoration: const InputDecoration(labelText: "Categoría", border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(controller: preController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Precio", border: OutlineInputBorder(), prefixText: "\$ ")),
+                  const SizedBox(height: 15),
+                  if (imagenesNuevasAEspera.isNotEmpty)
+                    SizedBox(
                       height: 80,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
-                        itemCount: fotosDB.length,
-                        itemBuilder: (context, index) {
-                          final foto = fotosDB[index];
-                          return Stack(
-                            children: [
-                              Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                width: 70,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  image: DecorationImage(image: NetworkImage(foto['url']), fit: BoxFit.cover),
-                                ),
-                              ),
-                              Positioned(
-                                top: 0, right: 5,
-                                child: GestureDetector(
-                                  onTap: () async {
-                                    // LLAMADA A ELIMINACIÓN
-                                    await ProductosService().eliminarImagenCompleto(foto['id'].toString(), foto['url']);
-                                    setModalState(() {}); // Refrescar minigalería
-                                  },
-                                  child: const CircleAvatar(radius: 10, backgroundColor: Colors.red, child: Icon(Icons.close, size: 12, color: Colors.white)),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
-                
-                const Divider(height: 30),
-
-                // Formulario de textos
-                TextField(controller: nomController, decoration: const InputDecoration(labelText: "Nombre", border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                TextField(controller: descController, maxLines: 2, decoration: const InputDecoration(labelText: "Descripción", border: OutlineInputBorder())),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: categoriaEdit,
-                  items: categorias.map((cat) => DropdownMenuItem(value: cat['id'].toString(), child: Text(cat['nombre']))).toList(),
-                  onChanged: (val) => setModalState(() => categoriaEdit = val),
-                  decoration: const InputDecoration(labelText: "Categoría", border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(controller: preController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Precio", border: OutlineInputBorder(), prefixText: "\$ ")),
-                const SizedBox(height: 15),
-
-                // GESTIÓN DE IMÁGENES NUEVAS (Vista previa antes de subir)
-                if (imagenesNuevasAEspera.isNotEmpty)
-                  SizedBox(
-                    height: 80,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: imagenesNuevasAEspera.length,
-                      itemBuilder: (context, index) => Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        width: 70,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          image: DecorationImage(image: FileImage(File(imagenesNuevasAEspera[index].path)), fit: BoxFit.cover),
+                        itemCount: imagenesNuevasAEspera.length,
+                        itemBuilder: (context, index) => Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          width: 70,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            image: DecorationImage(image: FileImage(File(imagenesNuevasAEspera[index].path)), fit: BoxFit.cover),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-
-                TextButton.icon(
-                  onPressed: () async {
-                    final List<XFile> picked = await ImagePicker().pickMultiImage();
-                    if (picked.isNotEmpty) {
-                      setModalState(() => imagenesNuevasAEspera = picked);
-                    }
-                  },
-                  icon: const Icon(Icons.add_a_photo_outlined),
-                  label: const Text("Añadir fotos nuevas"),
-                ),
-
-                const SizedBox(height: 20),
-
-                ElevatedButton(
-                  onPressed: estaCargando ? null : () async {
-                    setModalState(() => estaCargando = true);
-                    try {
-                      await ProductosService().actualizarProducto(
-                        id: producto['id'].toString(),
-                        nombre: nomController.text,
-                        precio: double.parse(preController.text),
-                        descripcion: descController.text,
-                        categoria: categoriaEdit!,
-                      );
-
-                      if (imagenesNuevasAEspera.isNotEmpty) {
-                        await ProductosService().subirFotosAdicionales(
-                          producto['id'].toString(),
-                          producto['fk_negocio'].toString(),
-                          imagenesNuevasAEspera,
-                        );
+                  TextButton.icon(
+                    onPressed: () async {
+                      final List<XFile> picked = await ImagePicker().pickMultiImage();
+                      if (picked.isNotEmpty) {
+                        setModalState(() => imagenesNuevasAEspera = picked);
                       }
-
-                      if (context.mounted) Navigator.pop(context);
-                    } catch (e) {
-                      setModalState(() => estaCargando = false);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
+                    },
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: const Text("Añadir fotos nuevas"),
                   ),
-                  child: estaCargando ? const CircularProgressIndicator(color: Colors.white) : const Text("Actualizar Producto"),
-                ),
-                const SizedBox(height: 20),
-              ],
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: estaCargando ? null : () async {
+                      setModalState(() => estaCargando = true);
+                      try {
+                        await ProductosService().actualizarProducto(
+                          id: producto['id'].toString(),
+                          nombre: nomController.text,
+                          precio: double.parse(preController.text),
+                          descripcion: descController.text,
+                          categoria: categoriaEdit!,
+                        );
+
+                        if (imagenesNuevasAEspera.isNotEmpty) {
+                          await ProductosService().subirFotosAdicionales(
+                            producto['id'].toString(),
+                            producto['fk_negocio'].toString(),
+                            imagenesNuevasAEspera,
+                          );
+                        }
+
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                        setModalState(() => estaCargando = false);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: estaCargando ? const CircularProgressIndicator(color: Colors.white) : const Text("Actualizar Producto"),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
-          ),
-        );
-      },
-    ),
-  );
-}
+          );
+        },
+      ),
+    );
+  }
 
-void _confirmarEliminacion(dynamic id, String nombre) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text("Eliminar Producto"),
-      content: Text("¿Estás seguro de eliminar \"$nombre\"? Se borrarán sus datos y archivos del servidor."),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
-        TextButton(
-          onPressed: () async {
-            try {
-              final String productoId = id.toString();
-              // Obtenemos el ID del negocio que ya tienes cargado en la clase
-              final String negocioId = datosNegocio!['id'].toString();
+  void _confirmarEliminacion(dynamic id, String nombre) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Eliminar Producto"),
+        content: Text("¿Estás seguro de eliminar \"$nombre\"? Se borrarán sus datos y archivos del servidor."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+          TextButton(
+            onPressed: () async {
+              try {
+                final String productoId = id.toString();
+                final String negocioId = datosNegocio!['id'].toString();
+                final String rutaCarpeta = "$negocioId/$productoId";
 
-              // 1. RUTA DINÁMICA SEGÚN TU ESTRUCTURA
-              // La ruta es: "ID_NEGOCIO/ID_PRODUCTO"
-              final String rutaCarpeta = "$negocioId/$productoId";
-
-              debugPrint("Listando archivos en: $rutaCarpeta");
-
-              // 2. LISTAR ARCHIVOS DENTRO DE LA CARPETA DEL PRODUCTO
-              final List<FileObject> archivos = await _supabase
-                  .storage
-                  .from('productos')
-                  .list(path: rutaCarpeta);
-
-              if (archivos.isNotEmpty) {
-                // Creamos las rutas completas para borrar: "negocio/producto/archivo.jpg"
-                final List<String> rutasABorrar = archivos
-                    .map((file) => "$rutaCarpeta/${file.name}")
-                    .toList();
-
-                // 3. BORRAR ARCHIVOS FÍSICOS
-                await _supabase
+                final List<FileObject> archivos = await _supabase
                     .storage
                     .from('productos')
-                    .remove(rutasABorrar);
-                
-                debugPrint("✅ Archivos borrados: ${rutasABorrar.length}");
-              }
+                    .list(path: rutaCarpeta);
 
-              // 4. BORRAR REGISTRO DE LA BASE DE DATOS
-              await _supabase
-                  .from('productos')
-                  .delete()
-                  .eq('id', productoId);
+                if (archivos.isNotEmpty) {
+                  final List<String> rutasABorrar = archivos
+                      .map((file) => "$rutaCarpeta/${file.name}")
+                      .toList();
 
-              if (mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("✅ $nombre eliminado por completo"))
-                );
+                  await _supabase
+                      .storage
+                      .from('productos')
+                      .remove(rutasABorrar);
+                }
+
+                await _supabase
+                    .from('productos')
+                    .delete()
+                    .eq('id', productoId);
+
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("✅ $nombre eliminado por completo"))
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+                  );
+                }
               }
-            } catch (e) {
-              debugPrint("❌ Error en borrado total: $e");
-              if (mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-                );
-              }
-            }
-          },
-          child: const Text("Eliminar", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-        ),
-      ],
-    ),
-  );
-}
+            },
+            child: const Text("Eliminar", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _mostrarVentanaNuevoProducto(BuildContext context) {
     final nomController = TextEditingController();
@@ -419,7 +434,7 @@ void _confirmarEliminacion(dynamic id, String nombre) {
     final descController = TextEditingController();
     List<XFile> imagenesSeleccionadas = [];
     bool estaAbriendoGaleria = false;
-    bool estaPublicando = false; // ESTADO PARA EL BOTÓN
+    bool estaPublicando = false; 
 
     showModalBottomSheet(
       context: context,
@@ -463,8 +478,6 @@ void _confirmarEliminacion(dynamic id, String nombre) {
                   const SizedBox(height: 15),
                   TextField(controller: preController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Precio", border: OutlineInputBorder(), prefixText: "\$ ")),
                   const SizedBox(height: 20),
-                  
-                  // Galería de fotos
                   Row(
                     children: [
                       if (imagenesSeleccionadas.length < 3)
@@ -491,19 +504,15 @@ void _confirmarEliminacion(dynamic id, String nombre) {
                     ],
                   ),
                   const SizedBox(height: 25),
-
-                  // BOTÓN CON ANIMACIÓN Y BLOQUEO
                   ElevatedButton(
                     onPressed: estaPublicando 
-                        ? null // Deshabilitado si está publicando
+                        ? null 
                         : () async {
                             if (nomController.text.isEmpty || preController.text.isEmpty || categoriaSeleccionada == null) {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Faltan datos obligatorios")));
                               return;
                             }
-
-                            setModalState(() => estaPublicando = true); // Iniciar carga
-
+                            setModalState(() => estaPublicando = true);
                             try {
                               await ProductosService().crearProductoAutomatico(
                                 context,
@@ -522,14 +531,11 @@ void _confirmarEliminacion(dynamic id, String nombre) {
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 50),
                       backgroundColor: Colors.green,
-                      disabledBackgroundColor: Colors.green.withOpacity(0.5), // Color más suave al cargar
+                      disabledBackgroundColor: Colors.green.withOpacity(0.5),
                       foregroundColor: Colors.white,
                     ),
                     child: estaPublicando
-                        ? const SizedBox(
-                            height: 20, width: 20, 
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                          )
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Text("Publicar Ahora"),
                   ),
                   const SizedBox(height: 20),

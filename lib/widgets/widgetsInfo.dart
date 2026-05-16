@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
-// Widget para los botones pequeños del Grid
+// --- ELEMENTOS DEL GRID (ACCIONES RÁPIDAS) ---
 class GridItemCuenta extends StatelessWidget {
   final IconData icono;
   final String titulo;
@@ -15,47 +15,52 @@ class GridItemCuenta extends StatelessWidget {
     required this.pagina,
   });
 
- @override
+  @override
   Widget build(BuildContext context) {
-    return InkWell( // Cambié GestureDetector por InkWell para tener feedback visual al tocar
+    final esOscuro = Theme.of(context).brightness == Brightness.dark;
+
+    return InkWell(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => pagina),
       ),
-      borderRadius: BorderRadius.circular(15),
+      borderRadius: BorderRadius.circular(20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: double.infinity, 
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10), 
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
+              color: esOscuro ? const Color(0xFF1E1E1E) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: esOscuro ? Colors.white10 : Colors.grey.withOpacity(0.1),
+              ),
               boxShadow: [
-                const BoxShadow(
-                  color: Color.fromRGBO(0, 0, 0, 0.04), 
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
                   blurRadius: 10,
-                  offset: Offset(0, 4),
+                  offset: const Offset(0, 5),
                 )
               ],
             ),
             child: Icon(
-              icono, 
-              color: const Color.fromARGB(255, 27, 27, 27), 
-              size: 30, 
+              icono,
+              color: esOscuro ? Colors.white : const Color(0xFF2D2D2D),
+              size: 26,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             titulo,
             textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12.5, 
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: esOscuro ? Colors.grey[400] : Colors.black87,
+              letterSpacing: -0.2,
             ),
           ),
         ],
@@ -64,6 +69,7 @@ class GridItemCuenta extends StatelessWidget {
   }
 }
 
+// --- TARJETA DE ACCIÓN CRÍTICA (ELIMINAR/ADVERTENCIA) ---
 class LargeCardAction extends StatelessWidget {
   final String titulo;
   final String subtitulo;
@@ -78,138 +84,96 @@ class LargeCardAction extends StatelessWidget {
     required this.subtitulo,
     required this.icono,
     required this.onTap,
-    this.colorPrincipal = Colors.red, // Rojo por defecto para eliminar
+    this.colorPrincipal = Colors.redAccent,
     this.isLoading = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: colorPrincipal.withOpacity(0.2), width: 1.5),
-      ),
-      color: colorPrincipal.withOpacity(0.05),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: isLoading ? null : onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Row(
-            children: [
-              // Círculo del icono dinámico
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: colorPrincipal.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icono, color: colorPrincipal, size: 28),
-              ),
-              const SizedBox(width: 15),
-              // Textos descriptivos
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      titulo,
-                      style: TextStyle(
-                        color: colorPrincipal,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      subtitulo,
-                      style: TextStyle(
-                        color: colorPrincipal.withOpacity(0.6),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (isLoading)
-                const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
-                )
-              else
-                Icon(Icons.arrow_forward_ios, color: colorPrincipal, size: 16),
-            ],
-          ),
+    return InkWell(
+      onTap: isLoading ? null : onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colorPrincipal.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: colorPrincipal.withOpacity(0.2), width: 1.2),
         ),
-      ),
-    );
-  }
-}
-// Widget para las tarjetas largas (Panel de Negocio)
-class LargeCardCuenta extends StatelessWidget {
-  final String titulo;
-  final IconData icono;
-  final Color colorIcono;
-  final Widget pagina;
-
-  const LargeCardCuenta({
-    super.key,
-    required this.titulo,
-    required this.icono,
-    required this.colorIcono,
-    required this.pagina,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: ListTile(
-        leading: Icon(icono, color: colorIcono),
-        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.w500)),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => pagina),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorPrincipal.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icono, color: colorPrincipal, size: 22),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    titulo,
+                    style: TextStyle(color: colorPrincipal, fontSize: 15, fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    subtitulo,
+                    style: TextStyle(color: colorPrincipal.withOpacity(0.7), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            if (isLoading)
+              SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: colorPrincipal))
+            else
+              Icon(Icons.arrow_forward_ios_rounded, color: colorPrincipal, size: 14),
+          ],
         ),
       ),
     );
   }
 }
 
-// Botón Iniciar Sesión estilo DiDi
+// --- BOTONES DE SESIÓN ---
+
 class BotonLoginDiDi extends StatelessWidget {
   final Widget loginPage;
   const BotonLoginDiDi({super.key, required this.loginPage});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color.fromRGBO(0, 180, 195, 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
       child: ElevatedButton(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => loginPage),
-        ),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => loginPage)),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 18),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           elevation: 0,
         ),
-        child: const Text("Iniciar Sesión",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        child: const Text("Iniciar Sesión", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
       ),
     );
   }
 }
 
-// Botón Cerrar Sesión estilo DiDi
 class BotonLogoutDiDi extends StatelessWidget {
-  final VoidCallback onLogout; // Función para recargar datos después de salir
+  final VoidCallback onLogout;
 
   const BotonLogoutDiDi({super.key, required this.onLogout});
 
@@ -217,32 +181,30 @@ class BotonLogoutDiDi extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      child: OutlinedButton.icon(
+      child: TextButton.icon(
         onPressed: () async {
+          // Lógica de logout optimizada
           try {
             final token = await FirebaseMessaging.instance.getToken().timeout(
-                  const Duration(seconds: 2),
+                  const Duration(seconds: 1),
                   onTimeout: () => null,
                 );
             if (token != null) {
-              await Supabase.instance.client
-                  .from('fcm_tokens')
-                  .delete()
-                  .eq('token', token);
+              await Supabase.instance.client.from('fcm_tokens').delete().eq('token', token);
             }
-          } catch (e) {
-            debugPrint("Error al borrar token: $e");
-          }
+          } catch (_) {}
           await Supabase.instance.client.auth.signOut();
-          onLogout(); // Llamamos a _cargarDatos() de la info_page
+          onLogout();
         },
-        icon: const Icon(Icons.logout),
-        label: const Text("Cerrar Sesión"),
-        style: OutlinedButton.styleFrom(
+        icon: const Icon(Icons.logout_rounded, size: 20),
+        label: const Text("Cerrar Sesión", style: TextStyle(fontWeight: FontWeight.w800)),
+        style: TextButton.styleFrom(
           foregroundColor: Colors.redAccent,
-          side: const BorderSide(color: Colors.redAccent),
           padding: const EdgeInsets.symmetric(vertical: 18),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: Colors.redAccent, width: 1.5),
+          ),
         ),
       ),
     );

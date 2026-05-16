@@ -72,11 +72,29 @@ class PBShopApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'PB Shop',
+      
+      // TEMA CLARO (El que ya tienes)
       theme: ThemeData(
+        brightness: Brightness.light,
         primaryColor: const Color.fromRGBO(0, 180, 195, 1),
         useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(backgroundColor: Color.fromRGBO(0, 180, 195, 1)),
       ),
-      // Definimos la pantalla de inicio (login o home)
+
+      // TEMA OSCURO
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        primaryColor: const Color.fromRGBO(0, 180, 195, 1),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF121212), // Un negro mate elegante
+        appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF1F1F1F)),
+        cardTheme: CardThemeData(color: Color(0xFF1E1E1E)),
+        // Esto asegura que tus textos se adapten automáticamente
+      ),
+
+      // Esto hace que la app use el modo del sistema (si el cel está en oscuro, la app también)
+      themeMode: ThemeMode.system,
       home: const home_page(), 
     );
   }

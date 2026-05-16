@@ -41,6 +41,12 @@
                 <action android:name="FLUTTER_NOTIFICATION_CLICK" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <intent-filter android:label="recuperar_password_pbshop">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.pbshop.app" android:host="reset-callback" />
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"

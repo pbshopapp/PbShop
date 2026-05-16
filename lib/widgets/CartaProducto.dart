@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:pbshop/pantallas/product_page.dart';
 import 'package:pbshop/widgets/CuadroDeImagenes.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart'; // Importamos intl
+import 'package:intl/intl.dart';
 
 class CartaProducto extends StatelessWidget {
   final Map<String, dynamic> producto;
-  // --- NUEVOS PARÁMETROS PARA ADMIN ---
   final bool esAdmin;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -14,7 +13,7 @@ class CartaProducto extends StatelessWidget {
   const CartaProducto({
     super.key, 
     required this.producto,
-    this.esAdmin = false, // Por defecto es falso para la tienda normal
+    this.esAdmin = false,
     this.onEdit,
     this.onDelete,
   });
@@ -34,18 +33,27 @@ class CartaProducto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Formateador de moneda
+    const Color colorInstitucional = Color.fromRGBO(0, 180, 195, 1);
+    final esOscuro = Theme.of(context).brightness == Brightness.dark;
     final monedaCop = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
 
-    return Material(
-      type: MaterialType.transparency,
-      child: Card(
-        elevation: 4,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+    return Container(
+      decoration: BoxDecoration(
+        color: esOscuro ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(esOscuro ? 0.3 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
         child: InkWell(
           onTap: () {
-            if (!esAdmin) { // Si es admin, quizás prefieras que no navegue al tocar
+            if (!esAdmin) {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => product_page(producto: producto)),
@@ -59,87 +67,86 @@ class CartaProducto extends StatelessWidget {
               Stack(
                 children: [
                   SizedBox(
-                    height: 120,
+                    height: 130,
                     width: double.infinity,
                     child: FutureBuilder<List<String>>(
                       future: _obtenerFotos(),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
-                          return Container(color: Colors.grey[200], child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
+                          return Container(
+                            color: esOscuro ? Colors.white10 : Colors.grey[100],
+                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: colorInstitucional)),
+                          );
                         }
-                        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                        
+                        final tieneUrls = snapshot.hasData && snapshot.data!.isNotEmpty;
+                        final urlPrincipal = producto['imagen_url']?.toString();
+
+                        if (tieneUrls) {
                           return CuadroDeImagenes(urls: snapshot.data!, mostrarPuntos: true);
                         }
+
                         return Container(
-                          color: Colors.grey[200],
-                          child: producto['imagen_url'] != null && producto['imagen_url'].toString().isNotEmpty
-                              ? Image.network(producto['imagen_url'], fit: BoxFit.cover)
-                              : const Center(child: Icon(Icons.fastfood, size: 40, color: Colors.grey)),
+                          color: esOscuro ? Colors.white10 : Colors.grey[100],
+                          child: (urlPrincipal != null && urlPrincipal.isNotEmpty)
+                              ? Image.network(urlPrincipal, fit: BoxFit.cover)
+                              : Icon(Icons.fastfood_rounded, size: 40, color: colorInstitucional.withOpacity(0.3)),
                         );
                       },
                     ),
                   ),
-                  // --- BOTONES DE ADMIN FLOTANTES (OPCIONAL) ---
+                  
+                  // Botones de Admin
                   if (esAdmin)
                     Positioned(
-                      top: 5,
-                      right: 5,
+                      top: 10,
+                      right: 10,
                       child: Row(
                         children: [
-                          _botonCircularAdmin(Icons.edit, Colors.blue, onEdit),
-                          const SizedBox(width: 5),
-                          _botonCircularAdmin(Icons.delete, Colors.red, onDelete),
+                          _botonCircularAdmin(Icons.edit_rounded, Colors.blue, onEdit),
+                          const SizedBox(width: 8),
+                          _botonCircularAdmin(Icons.delete_outline_rounded, Colors.redAccent, onDelete),
                         ],
                       ),
                     ),
                 ],
               ),
               
+              // --- DETALLES ---
               Padding(
-                padding: const EdgeInsets.all(8.0),
+                padding: const EdgeInsets.all(12.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      producto['nombre'] ?? 'Sin nombre', 
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      producto['ubicacion_negocio'] ?? 'Ubicación no disponible', 
-                      style: const TextStyle(color: Colors.blueGrey, fontSize: 11),
+                      producto['nombre'] ?? 'Producto', 
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: -0.2),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // RATING
-                        Row(
-                          children: [
-                            const Icon(Icons.star, color: Colors.amber, size: 14),
-                            const SizedBox(width: 4),
-                            Text(
-                              (producto['rating_promedio'] == null || producto['rating_promedio'] == 0)
-                                  ? "N/A"
-                                  : producto['rating_promedio'].toString(),
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                        // PRECIO FORMATEADO CON INTL
-                        Text(
-                          monedaCop.format(producto['precio'] ?? 0),
-                          style: const TextStyle(
-                            color: Color.fromRGBO(0, 180, 195, 1), 
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 14
-                          )
+                        Icon(Icons.location_on_outlined, size: 12, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            producto['ubicacion_negocio'] ?? 'Pascual Bravo', 
+                            style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      monedaCop.format(producto['precio'] ?? 0),
+                      style: const TextStyle(
+                        color: colorInstitucional, 
+                        fontWeight: FontWeight.w900, 
+                        fontSize: 15
+                      ),
                     ),
                   ],
                 ),
@@ -151,13 +158,18 @@ class CartaProducto extends StatelessWidget {
     );
   }
 
-  // Widget para los botones pequeños de admin sobre la imagen
   Widget _botonCircularAdmin(IconData icono, Color color, VoidCallback? accion) {
     return GestureDetector(
       onTap: accion,
-      child: CircleAvatar(
-        radius: 14,
-        backgroundColor: Colors.white.withOpacity(0.9),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 4, offset: const Offset(0, 2))
+          ],
+        ),
         child: Icon(icono, size: 16, color: color),
       ),
     );

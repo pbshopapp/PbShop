@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/CartService.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
+// Asegúrate de importar el widget del encabezado
+import 'package:pbshop/widgets/EncabezadoAnimado.dart';
 
 class car_page extends StatefulWidget {
   const car_page({super.key});
@@ -32,7 +34,7 @@ class _car_pageState extends State<car_page> {
     super.dispose();
   }
 
-  // --- FUNCIÓN DE CONFIRMACIÓN PRINCIPAL ---
+  // ... (Toda tu lógica de _confirmarPedido y _mostrarMensaje se mantiene igual) ...
   Future<void> _confirmarPedido(String idNegocio, List<ItemCarrito> itemsTienda) async {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
@@ -47,7 +49,6 @@ class _car_pageState extends State<car_page> {
 
     try {
       if (metodo == 'api') {
-        // Aquí iría tu lógica de Wompi / Pasarela
         _mostrarMensaje("Redirigiendo a pasarela de pagos...", Colors.blue);
         return; 
       }
@@ -61,7 +62,6 @@ class _car_pageState extends State<car_page> {
 
       double totalNegocio = itemsTienda.fold(0, (sum, item) => sum + item.total);
       
-      // 1. Insertar Pedido
       final pedido = await supabase.from('pedidos').insert({
         'id_usuario': user.id,
         'fk_negocio': idNegocio,
@@ -72,7 +72,6 @@ class _car_pageState extends State<car_page> {
         'notas': _notaControllers[idNegocio]?.text ?? "",
       }).select().single();
 
-      // 2. Insertar Detalles
       final detalles = itemsTienda.map((item) => {
         'fk_pedido': pedido['id'],
         'fk_producto': item.id,
@@ -82,7 +81,6 @@ class _car_pageState extends State<car_page> {
 
       await supabase.from('detalles_pedido').insert(detalles);
 
-      // 3. Limpiar Carrito y Estados
       setState(() {
         _cartService.items.removeWhere((item) => item.fkNegocio == idNegocio);
         _comprobantes.remove(idNegocio);
@@ -105,37 +103,87 @@ class _car_pageState extends State<car_page> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(title: const Text("Mi Carrito"), centerTitle: true, elevation: 0),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      // Usamos CustomScrollView para integrar el EncabezadoAnimado
       body: ListenableBuilder(
         listenable: _cartService,
         builder: (context, _) {
           final items = _cartService.items;
-          if (items.isEmpty) return const Center(child: Text("Tu carrito está vacío"));
 
+          // Mapa de productos agrupados por tienda
           final Map<String, List<ItemCarrito>> gruposPorTienda = {};
           for (var item in items) {
             gruposPorTienda.putIfAbsent(item.fkNegocio, () => []).add(item);
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(15),
-            children: gruposPorTienda.entries.map((entry) => _buildSeccionTienda(entry.key, entry.value)).toList(),
+          return CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              // 1. EL ENCABEZADO PERSONALIZADO PARA EL CARRITO
+              const EncabezadoAnimado(
+                titulo: "Mi Carrito",
+                subtitulo: "Finaliza tus compras pascualinas",
+                mostrarLogo: false, // Usamos icono en lugar de logo
+                iconoAlternativo: Icon(
+                  Icons.shopping_cart_checkout_rounded,
+                  color: Colors.white,
+                  size: 50,
+                ),
+              ),
+
+              // 2. CONTENIDO DEL CARRITO
+              if (items.isEmpty)
+                const SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.remove_shopping_cart_outlined, size: 60, color: Colors.grey),
+                        SizedBox(height: 10),
+                        Text("Tu carrito está vacío", style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.all(15),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final entry = gruposPorTienda.entries.elementAt(index);
+                        return _buildSeccionTienda(entry.key, entry.value);
+                      },
+                      childCount: gruposPorTienda.length,
+                    ),
+                  ),
+                ),
+            ],
           );
         },
       ),
     );
   }
 
+  // --- El resto de tus métodos de construcción (_buildSeccionTienda, _buildVistaPago, etc.) 
+  // se mantienen exactamente igual a como los tenías ---
+
   Widget _buildSeccionTienda(String idNegocio, List<ItemCarrito> itemsTienda) {
     bool enModoPago = _mostrandoPago[idNegocio] ?? false;
+    final theme = Theme.of(context);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 20),
       elevation: 0,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade200)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20), 
+        side: BorderSide(color: theme.dividerColor)
+      ),
+      color: theme.cardTheme.color,
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 400),
         transitionBuilder: (child, animation) {
@@ -153,6 +201,7 @@ class _car_pageState extends State<car_page> {
   Widget _buildVistaResumen(String idNegocio, List<ItemCarrito> itemsTienda) {
     _notaControllers.putIfAbsent(idNegocio, () => TextEditingController());
     double subtotal = itemsTienda.fold(0, (sum, item) => sum + item.total);
+    final theme = Theme.of(context);
 
     return Column(
       key: ValueKey("resumen_$idNegocio"),
@@ -163,11 +212,13 @@ class _car_pageState extends State<car_page> {
           padding: const EdgeInsets.all(15),
           child: TextField(
             controller: _notaControllers[idNegocio],
+            style: TextStyle(color: theme.textTheme.bodyLarge?.color),
             decoration: InputDecoration(
               hintText: "Notas para esta tienda",
-              prefixIcon: const Icon(Icons.note_alt_outlined),
+              hintStyle: TextStyle(color: theme.hintColor),
+              prefixIcon: Icon(Icons.note_alt_outlined, color: theme.hintColor),
               filled: true,
-              fillColor: Colors.grey[50],
+              fillColor: theme.brightness == Brightness.dark ? Colors.white.withOpacity(0.05) : Colors.grey[50],
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             ),
           ),
@@ -178,31 +229,22 @@ class _car_pageState extends State<car_page> {
   }
 
   Widget _buildVistaPago(String idNegocio, List<ItemCarrito> itemsTienda) {
+    final theme = Theme.of(context);
     return FutureBuilder<Map<String, dynamic>>(
       future: Supabase.instance.client
           .from('negocios')
-          .select('''
-            *,
-            metodos_pago (
-              tipo_metodo,
-              numero_cuenta,
-              nombre_titular,
-              activo
-            )
-          ''')
+          .select('*, metodos_pago (*)')
           .eq('id', idNegocio)
-          // ESTA ES LA CLAVE: Filtramos la relación para que solo traiga las TRUE
           .eq('metodos_pago.activo', true) 
           .single(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
         
-        final dataNegocio = snapshot.data!;
         final data = snapshot.data!;
         List<Widget> botones = [];
         if (data['acepta_efectivo'] == true) botones.add(_btnMetodo(idNegocio, 'efectivo', Icons.payments, "Efectivo"));
         if (data['acepta_transferencia_manual'] == true) botones.add(_btnMetodo(idNegocio, 'transferencia', Icons.camera_alt, "Transferencia"));
-        if (data['acepta_pagos_api'] == true) botones.add(_btnMetodo(idNegocio, 'api', Icons.account_balance, "En línea(PSE/Tarjeta)"));
+        if (data['acepta_pagos_api'] == true) botones.add(_btnMetodo(idNegocio, 'api', Icons.account_balance, "En línea"));
 
         return Container(
           key: ValueKey("pago_$idNegocio"),
@@ -210,31 +252,31 @@ class _car_pageState extends State<car_page> {
           child: Column(
             children: [
               Row(children: [
-                IconButton(icon: const Icon(Icons.arrow_back_ios, size: 20), onPressed: () => setState(() => _mostrandoPago[idNegocio] = false)),
-                const Text("Método de Pago", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                IconButton(
+                  icon: Icon(Icons.arrow_back_ios, size: 20, color: theme.iconTheme.color), 
+                  onPressed: () => setState(() => _mostrandoPago[idNegocio] = false)
+                ),
+                Text("Método de Pago", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.textTheme.bodyLarge?.color)),
               ]),
               const SizedBox(height: 20),
               Row( 
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: botones.map((b) => Expanded( // El Expanded obliga a que todos midan lo mismo
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4), // Espaciado entre botones
-                    child: b,
-                  ),
+                children: botones.map((b) => Expanded(
+                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: b),
                 )).toList(),
               ),
               const SizedBox(height: 20),
-              AnimatedSize(duration: const Duration(milliseconds: 300), child: _buildDetalleMetodo(idNegocio, dataNegocio)),
+              AnimatedSize(duration: const Duration(milliseconds: 300), child: _buildDetalleMetodo(idNegocio, data)),
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _puedeFinalizar(idNegocio) ? () => _confirmarPedido(idNegocio, itemsTienda) : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
+                  backgroundColor: colorPB,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  disabledBackgroundColor: theme.dividerColor,
                 ),
-                child: _isConfirming ? const CircularProgressIndicator(color: Colors.white) : const Text("Finalizar Compra"),
+                child: _isConfirming ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text("Finalizar Compra"),
               ),
             ],
           ),
@@ -243,24 +285,12 @@ class _car_pageState extends State<car_page> {
     );
   }
 
- Widget _buildDetalleMetodo(String idNegocio, Map<String, dynamic> data) {
+  Widget _buildDetalleMetodo(String idNegocio, Map<String, dynamic> data) {
     final metodo = _metodoSeleccionado[idNegocio];
-
     if (metodo == 'transferencia') {
-      // Obtenemos la lista de métodos de pago del JSON
       final listaMetodos = data['metodos_pago'] as List<dynamic>;
-
-      if (listaMetodos.isEmpty) {
-        return _infoMetodo("Este negocio aún no tiene cuentas registradas.", Colors.red);
-      }
-
-      return Column(
-        children: [
-          _buildSeccionCuentas(listaMetodos),
-          const SizedBox(height: 15),
-          _buildSelectorImagen(idNegocio),
-        ],
-      );
+      if (listaMetodos.isEmpty) return _infoMetodo("Este negocio no tiene cuentas registradas.", Colors.red);
+      return Column(children: [_buildSeccionCuentas(listaMetodos), const SizedBox(height: 15), _buildSelectorImagen(idNegocio)]);
     } else if (metodo == 'efectivo') {
       return _infoMetodo("Pagas al recibir el producto en el local.", Colors.orange);
     } else if (metodo == 'api') {
@@ -271,27 +301,34 @@ class _car_pageState extends State<car_page> {
 
   Widget _infoMetodo(String txt, Color col) => Container(
     padding: const EdgeInsets.all(12),
+    width: double.infinity,
     decoration: BoxDecoration(color: col.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
     child: Text(txt, style: TextStyle(color: col, fontSize: 13), textAlign: TextAlign.center),
   );
 
   Widget _btnMetodo(String idNegocio, String tipo, IconData icon, String label) {
     bool sel = _metodoSeleccionado[idNegocio] == tipo;
+    final theme = Theme.of(context);
     return InkWell(
       onTap: () => setState(() => _metodoSeleccionado[idNegocio] = tipo),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: sel ? const Color.fromRGBO(0, 180, 195, 0.1) : Colors.white,
-          border: Border.all(color: sel ? const Color.fromRGBO(0, 180, 195, 1) : Colors.grey.shade300),
+          color: sel ? colorPB.withOpacity(0.1) : theme.cardTheme.color, 
+          border: Border.all(color: sel ? colorPB : theme.dividerColor),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Column(children: [Icon(icon, size: 20, color: sel ? const Color.fromRGBO(0, 180, 195, 1) : Colors.grey), Text(label, style: TextStyle(fontSize: 12, color: sel ? Colors.black : Colors.grey))]),
+        child: Column(children: [
+          Icon(icon, size: 20, color: sel ? colorPB : theme.hintColor),
+          const SizedBox(height: 4),
+          Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 10, fontWeight: sel ? FontWeight.bold : FontWeight.normal, color: sel ? (theme.brightness == Brightness.dark ? Colors.white : Colors.black) : theme.hintColor)),
+        ]),
       ),
     );
   }
 
   Widget _buildSelectorImagen(String idNegocio) {
+    final theme = Theme.of(context);
     return GestureDetector(
       onTap: () async {
         final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 70);
@@ -299,9 +336,9 @@ class _car_pageState extends State<car_page> {
       },
       child: Container(
         height: 120, width: double.infinity,
-        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(border: Border.all(color: theme.dividerColor), borderRadius: BorderRadius.circular(12)),
         child: _comprobantes[idNegocio] == null 
-          ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, color: Colors.grey), Text("Subir Comprobante", style: TextStyle(fontSize: 12))])
+          ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, color: theme.hintColor), Text("Subir Comprobante", style: TextStyle(fontSize: 12, color: theme.hintColor))])
           : ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_comprobantes[idNegocio]!, fit: BoxFit.cover)),
       ),
     );
@@ -315,95 +352,91 @@ class _car_pageState extends State<car_page> {
   }
 
   Widget _buildHeaderTienda(String idNegocio) {
+    final theme = Theme.of(context);
     return FutureBuilder<Map<String, dynamic>>(
       future: Supabase.instance.client.from('negocios').select('nombre').eq('id', idNegocio).single(),
       builder: (context, snap) => Container(
-        padding: const EdgeInsets.all(15), color: Colors.grey[100],
-        child: Row(children: [const Icon(Icons.storefront, color: Color.fromRGBO(0, 180, 195, 1)), const SizedBox(width: 10), Text(snap.hasData ? snap.data!['nombre'] : "...", style: const TextStyle(fontWeight: FontWeight.bold))]),
+        padding: const EdgeInsets.all(15), 
+        color: theme.brightness == Brightness.dark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+        child: Row(children: [
+          Icon(Icons.storefront, color: colorPB), 
+          const SizedBox(width: 10), 
+          Text(snap.hasData ? snap.data!['nombre'] : "...", style: const TextStyle(fontWeight: FontWeight.bold))
+        ]),
       ),
     );
   }
 
   Widget _buildSeccionCuentas(List<dynamic> cuentas) {
-    // Tomamos solo las primeras 2 cuentas registradas por el negocio
-    final cuentasVisibles = cuentas.take(2).toList();
-
+    final theme = Theme.of(context);
     return Column(
-      children: cuentasVisibles.map((cuenta) {
+      children: cuentas.take(2).map((cuenta) {
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: theme.brightness == Brightness.dark ? Colors.white.withOpacity(0.05) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: colorPB.withOpacity(0.2)),
           ),
-          child: Column(
-            children: [
-              Text(
-                cuenta['tipo_metodo'].toString().toUpperCase(),
-                style: TextStyle(color: colorPB, fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-              const SizedBox(height: 8),
-              
-              // EL NÚMERO INTERACTIVO
-              GestureDetector(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: cuenta['numero_cuenta'].toString()));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text("¡Número copiado!"),
-                      duration: const Duration(seconds: 1),
-                      backgroundColor: colorPB,
-                    ),
-                  );
-                },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      cuenta['numero_cuenta'],
-                      style: const TextStyle(
-                        fontSize: 24, 
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.copy_rounded, size: 18, color: Colors.grey[400]),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 4),
-              Text(
-                "Titular: ${cuenta['nombre_titular']}",
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-            ],
-          ),
+          child: Column(children: [
+            Text(cuenta['tipo_metodo'].toString().toUpperCase(), style: TextStyle(color: colorPB, fontWeight: FontWeight.bold, fontSize: 11)),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: cuenta['numero_cuenta'].toString()));
+                _mostrarMensaje("¡Número copiado!", colorPB);
+              },
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text(cuenta['numero_cuenta'], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                const SizedBox(width: 8),
+                Icon(Icons.copy_rounded, size: 18, color: theme.hintColor),
+              ]),
+            ),
+            Text("Titular: ${cuenta['nombre_titular']}", style: TextStyle(color: theme.hintColor, fontSize: 12)),
+          ]),
         );
       }).toList(),
     );
   }
-  Widget _buildFooterResumen(String idNegocio, double sub) => Padding(
-    padding: const EdgeInsets.all(15),
-    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Total", style: TextStyle(color: Colors.grey, fontSize: 12)), Text(f.format(sub), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green))]),
-      ElevatedButton(onPressed: () => setState(() => _mostrandoPago[idNegocio] = true), style: ElevatedButton.styleFrom(backgroundColor: const Color.fromRGBO(0, 180, 195, 1), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text("Confirmar")),
-    ]),
-  );
 
-  Widget _buildCardProducto(ItemCarrito item, int idx) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-    child: Row(children: [
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item.nombre, style: const TextStyle(fontWeight: FontWeight.w600)), Text(f.format(item.precioUnitario), style: const TextStyle(color: Colors.grey, fontSize: 12))])),
-      _btnQty(Icons.remove, () => _cartService.cambiarCantidad(idx, false)),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text("${item.cantidad}")),
-      _btnQty(Icons.add, () => _cartService.cambiarCantidad(idx, true)),
-      IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20), onPressed: () => _cartService.eliminarProducto(idx)),
-    ]),
-  );
+  Widget _buildFooterResumen(String idNegocio, double sub) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(15),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text("Total", style: TextStyle(color: theme.hintColor, fontSize: 12)), 
+          Text(f.format(sub), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green))
+        ]),
+        ElevatedButton(
+          onPressed: () => setState(() => _mostrandoPago[idNegocio] = true), 
+          style: ElevatedButton.styleFrom(backgroundColor: colorPB, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), 
+          child: const Text("Confirmar")
+        ),
+      ]),
+    );
+  }
 
-  Widget _btnQty(IconData icon, VoidCallback tap) => InkWell(onTap: tap, child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(6)), child: Icon(icon, size: 16)));
+  Widget _buildCardProducto(ItemCarrito item, int idx) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+      child: Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(item.nombre, style: const TextStyle(fontWeight: FontWeight.w600)), 
+          Text(f.format(item.precioUnitario), style: TextStyle(color: theme.hintColor, fontSize: 12))
+        ])),
+        _btnQty(Icons.remove, () => _cartService.cambiarCantidad(idx, false)),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text("${item.cantidad}")),
+        _btnQty(Icons.add, () => _cartService.cambiarCantidad(idx, true)),
+        IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20), onPressed: () => _cartService.eliminarProducto(idx)),
+      ]),
+    );
+  }
+
+  Widget _btnQty(IconData icon, VoidCallback tap) {
+    final theme = Theme.of(context);
+    return InkWell(onTap: tap, child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(border: Border.all(color: theme.dividerColor), borderRadius: BorderRadius.circular(6)), child: Icon(icon, size: 16, color: theme.iconTheme.color)));
+  }
 }

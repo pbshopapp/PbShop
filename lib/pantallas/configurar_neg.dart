@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ConfigurarNegocioPage extends StatefulWidget {
   final String idNegocio;
@@ -19,17 +19,29 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
   
   // Paleta de colores PB-Shop
   final Color colorPB = const Color.fromRGBO(0, 180, 195, 1);
-  final Color colorFondo = const Color(0xFFF8F9FA);
-  final Color colorTextoSecundario = const Color(0xFF6C757D);
 
+  // Controladores de texto
   late TextEditingController _nameController;
   late TextEditingController _descController;
+  late TextEditingController _ubicacionController;  // Nuevo campo
+  final _emailAyudanteController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _cargarDatos();
   }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descController.dispose();
+    _ubicacionController.dispose();
+    _emailAyudanteController.dispose();
+    super.dispose();
+  }
+
+  // --- LÓGICA DE DATOS ---
 
   Future<void> _cargarDatos() async {
     try {
@@ -39,122 +51,201 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
           .eq('id', widget.idNegocio)
           .single();
       
-      setState(() {
-        _datosNegocio = res;
-        _metodosPago = res['metodos_pago'];
-        _nameController = TextEditingController(text: res['nombre']);
-        _descController = TextEditingController(text: res['descripcion']);
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _datosNegocio = res;
+          _metodosPago = res['metodos_pago'] ?? [];
+          // Ordenamos por ID de forma fija para que no salten de posición al actualizar
+          _metodosPago.sort((a, b) => a['id'].compareTo(b['id']));
+          
+          _nameController = TextEditingController(text: res['nombre'] ?? "");
+          _descController = TextEditingController(text: res['descripcion'] ?? "");
+          _ubicacionController = TextEditingController(text: res['ubicacion'] ?? ""); // Nuevo
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint("Error cargando datos: $e");
+      _notificar("Error al conectar con el servidor");
     }
   }
 
+  // --- LÓGICA DE IMAGEN (LOGO) ---
+
+  Future<void> _cambiarLogo() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
+
+    if (image != null) {
+      _notificar("Subiendo nueva imagen...");
+      try {
+        final file = File(image.path);
+        final fileName = 'logo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final path = '${widget.idNegocio}/$fileName';
+
+        // Subir al bucket 'logos_negocios'
+        await supabase.storage.from('logos_negocios').upload(path, file);
+        
+        // Obtener URL pública
+        final String publicUrl = supabase.storage.from('logos_negocios').getPublicUrl(path);
+
+        // Actualizar tabla negocios
+        await supabase.from('negocios').update({'imagen_url': publicUrl}).eq('id', widget.idNegocio);
+        
+        setState(() {
+          _datosNegocio?['imagen_url'] = publicUrl;
+        });
+        _notificar("¡Logo actualizado con éxito!");
+      } catch (e) {
+        debugPrint("Error subiendo logo: $e");
+        _notificar("Error al cambiar el logo de la empresa");
+      }
+    }
+  }
+
+  // --- MÉTODOS DE ACTUALIZACIÓN ---
+
+  Future<void> _actualizarPerfil() async {
+    try {
+      await supabase.from('negocios').update({
+        'nombre': _nameController.text,
+        'descripcion': _descController.text,
+        'ubicacion': _ubicacionController.text, // Nuevo
+      }).eq('id', widget.idNegocio);
+      _notificar("¡Cambios guardados con éxito!");
+    } catch (e) {
+      _notificar("Error al guardar cambios");
+    }
+  }
+
+  Future<void> _updateToggle(String campo, bool valor) async {
+    setState(() => _datosNegocio?[campo] = valor);
+    try {
+      await supabase.from('negocios').update({campo: valor}).eq('id', widget.idNegocio);
+    } catch (e) {
+      _cargarDatos(); // Revertir si falla
+      _notificar("Error al actualizar estado");
+    }
+  }
+
+  Future<void> _toggleEstadoCuenta(dynamic idCuenta, bool nuevoEstado) async {
+    // Cambio local inmediato para evitar saltos o retrasos visuales
+    setState(() {
+      final index = _metodosPago.indexWhere((m) => m['id'] == idCuenta);
+      if (index != -1) {
+        _metodosPago[index]['activo'] = nuevoEstado;
+      }
+    });
+
+    try {
+      await supabase.from('metodos_pago').update({'activo': nuevoEstado}).eq('id', idCuenta);
+    } catch (e) {
+      _cargarDatos(); // Si falla el servidor, revertimos al estado real
+      _notificar("Error al cambiar estado de cuenta");
+    }
+  }
+
+  Future<void> _borrarMetodo(String id) async {
+    try {
+      await supabase.from('metodos_pago').delete().eq('id', id);
+      _cargarDatos();
+    } catch (e) {
+      _notificar("No se pudo eliminar la cuenta");
+    }
+  }
+
+  // --- INTERFAZ DE USUARIO ---
+
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return Scaffold(backgroundColor: colorFondo, body: const Center(child: CircularProgressIndicator()));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: colorFondo,
         appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0.5,
-          title: const Text("Mi Negocio", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          toolbarHeight: 75, // Altura extra para desahogar las pestañas y que se lean completas
+          title: const Text("Mi Negocio", style: TextStyle(fontWeight: FontWeight.bold, color:  Colors.white)),
           centerTitle: true,
-          iconTheme: const IconThemeData(color: Colors.black),
           bottom: TabBar(
-            indicatorSize: TabBarIndicatorSize.label,
-            indicatorWeight: 3,
-            indicatorColor: colorPB,
-            labelColor: colorPB,
-            unselectedLabelColor: Colors.grey,
+            indicatorColor: isDark ? const Color.fromARGB(255, 36, 167, 179): Colors.white,
+            labelColor: isDark ? const Color.fromARGB(255, 36, 167, 179): Colors.white,
+            unselectedLabelColor: isDark ? Colors.white60 : const Color.fromARGB(255, 255, 255, 255),
             labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 13),
             tabs: const [
-              Tab(icon: Icon(Icons.store_rounded), text: "Perfil"),
-              Tab(icon: Icon(Icons.payments_rounded), text: "Pagos"),
-              Tab(icon: Icon(Icons.badge_rounded), text: "Equipo"),
+              Tab(icon: Icon(Icons.store_rounded, size: 22), text: "Perfil",),
+              Tab(icon: Icon(Icons.payments_rounded, size: 22), text: "Pagos"),
+              Tab(icon: Icon(Icons.badge_rounded, size: 22), text: "Equipo"),
             ],
           ),
         ),
         body: TabBarView(
           children: [
-            _buildTabPerfil(),
-            _buildTabPagos(),
-            _buildTabAyudantes(),
+            _buildTabPerfil(isDark),
+            _buildTabPagos(isDark),
+            _buildTabAyudantes(isDark),
           ],
         ),
       ),
     );
   }
 
-  // --- SECCIÓN 1: PERFIL (Rediseñado) ---
-  Widget _buildTabPerfil() {
+  // --- SECCIÓN 1: PERFIL ---
+  Widget _buildTabPerfil(bool isDark) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSelectorImagenPerfil(),
-          const SizedBox(height: 40),
-          _buildLabel("Información Pública"),
-          const SizedBox(height: 12),
+          const SizedBox(height: 35),
           _buildTextField(
             controller: _nameController,
             label: "Nombre del emprendimiento",
-            icon: Icons.edit,
+            icon: Icons.store,
+            isDark: isDark,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           _buildTextField(
             controller: _descController,
             label: "Descripción breve",
             icon: Icons.description,
             maxLines: 3,
+            isDark: isDark,
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 18),
+          _buildTextField(
+            controller: _ubicacionController, // Control de ubicación mapeado
+            label: "Ubicación en la u (Ej: Bloque P13)",
+            icon: Icons.location_on_rounded,
+            isDark: isDark,
+          ),
+          const SizedBox(height: 35),
           _buildBotonGuardar(),
         ],
       ),
     );
   }
 
-  // --- SECCIÓN 2: PAGOS (Estilo Moderno) ---
-  Widget _buildTabPagos() {
+  // --- SECCIÓN 2: PAGOS ---
+  Widget _buildTabPagos(bool isDark) {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        _buildLabel("Métodos de recepción"),
-        const SizedBox(height: 10),
+        _buildSectionLabel("Métodos de recepción"),
         Card(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Column(
             children: [
-              _buildSwitchMetodo(
-                titulo: "Efectivo",
-                subtitulo: "Pago contra entrega",
-                valor: _datosNegocio?['acepta_efectivo'] ?? false,
-                campo: 'acepta_efectivo',
-                icon: Icons.money,
-              ),
+              _buildSwitchMetodo("Efectivo", "Pago contra entrega", _datosNegocio?['acepta_efectivo'] ?? false, 'acepta_efectivo', Icons.money_rounded),
               const Divider(height: 1),
-              _buildSwitchMetodo(
-                titulo: "Transferencia Directa",
-                subtitulo: "Nequi, Daviplata o Ahorro a la mano",
-                valor: _datosNegocio?['acepta_transferencia_manual'] ?? false,
-                campo: 'acepta_transferencia_manual',
-                icon: Icons.account_balance_wallet,
-              ),
+              _buildSwitchMetodo("Transferencia", "Nequi, Daviplata, etc.", _datosNegocio?['acepta_transferencia_manual'] ?? false, 'acepta_transferencia_manual', Icons.account_balance_wallet_rounded),
               const Divider(height: 1),
-              _buildSwitchMetodo(
-                titulo: "Pago por API",
-                subtitulo: "Tarjetas de crédito/débito",
-                valor: _datosNegocio?['acepta_pagos_api'] ?? false,
-                campo: 'acepta_pagos_api',
-                icon: Icons.credit_card,
-              ),
-
+              _buildSwitchMetodo("Pago por API", "Tarjetas y PSE", _datosNegocio?['acepta_pagos_api'] ?? false, 'acepta_pagos_api', Icons.credit_card_rounded),
             ],
           ),
         ),
@@ -162,7 +253,7 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _buildLabel("Mis Cuentas Bancarias"),
+            _buildSectionLabel("Mis Cuentas Bancarias"),
             TextButton.icon(
               onPressed: _dialogMetodoPago,
               icon: const Icon(Icons.add),
@@ -171,188 +262,66 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
             )
           ],
         ),
-        if (_metodosPago.isEmpty) _buildEmptyState("Sin cuentas registradas"),
-        ..._metodosPago.map((m) => _buildCardCuenta(m)),
+        if (_metodosPago.isEmpty) 
+          const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("No hay cuentas registradas", style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)))),
+        ..._metodosPago.map((m) => _buildCardCuenta(m, isDark)),
       ],
     );
   }
 
-  // --- COMPONENTES UI AUXILIARES ---
-
-  Widget _buildLabel(String texto) {
-    return Text(
-      texto.toUpperCase(),
-      style: TextStyle(color: colorTextoSecundario, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.2),
-    );
-  }
-
-  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, int maxLines = 1}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: TextField(
-        controller: controller,
-        maxLines: maxLines,
-        decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: colorPB),
-          labelText: label,
-          labelStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBotonGuardar() {
-    return Container(
-      width: double.infinity,
-      height: 55,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
-        gradient: LinearGradient(colors: [colorPB, colorPB.withOpacity(0.8)]),
-        boxShadow: [BoxShadow(color: colorPB.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 6))],
-      ),
-      child: ElevatedButton(
-        onPressed: _actualizarPerfil,
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent),
-        child: const Text("GUARDAR CONFIGURACIÓN", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1), selectionColor: Color.fromARGB(255, 184, 184, 184),),
-      ),
-    );
-  }
-
-  Widget _buildSwitchMetodo({required String titulo, required String subtitulo, required bool valor, required String campo, required IconData icon}) {
-    return SwitchListTile(
-      activeColor: colorPB,
-      secondary: Icon(icon, color: valor ? colorPB : Colors.grey),
-      title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-      subtitle: Text(subtitulo, style: TextStyle(color: colorTextoSecundario, fontSize: 12)),
-      value: valor,
-      onChanged: (bool nuevoValor) => _updateToggle(campo, nuevoValor),
-    );
-  }
-
-  Widget _buildCardCuenta(Map<String, dynamic> m) {
-    // Verificamos el estado actual usando la llave correcta 'activo'
-    bool estaActiva = m['activo'] ?? true;
-
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        // El borde cambia de intensidad según el estado
-        border: Border.all(
-          color: estaActiva ? Colors.black.withOpacity(0.05) : Colors.grey.shade200,
-        ),
-        boxShadow: [
-          if (estaActiva)
-            BoxShadow(
-              color: Colors.black.withOpacity(0.01),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Avatar circular que se opaca si la cuenta está inactiva
-          CircleAvatar(
-            backgroundColor: estaActiva ? colorPB.withOpacity(0.1) : Colors.grey.shade100,
-            child: Icon(
-              Icons.account_balance_rounded,
-              color: estaActiva ? colorPB : Colors.grey.shade400,
-            ),
-          ),
-          const SizedBox(width: 15),
-
-          // Información de la cuenta con efectos visuales de estado
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  m['tipo_metodo'].toString().toUpperCase(),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: estaActiva ? Colors.black : Colors.grey,
-                  ),
-                ),
-                Text(
-                  m['numero_cuenta'],
-                  style: TextStyle(
-                    color: estaActiva ? colorTextoSecundario : Colors.grey.shade400,
-                    fontSize: 13,
-                    // Tacha el número si la cuenta está desactivada
-                    decoration: estaActiva ? null : TextDecoration.lineThrough,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Acción: Borrar cuenta
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
-            onPressed: () => _borrarMetodo(m['id']),
-            tooltip: "Eliminar cuenta",
-          ),
-
-          // Acción: Switch de activación rápida
-          // Al moverlo, se dispara la actualización en Supabase que ya corregiste
-          Switch(
-            value: estaActiva,
-            activeColor: colorPB,
-            onChanged: (bool valor) => _toggleEstadoCuenta(m['id'], valor),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(String msg) {
+  // --- SECCIÓN 3: EQUIPO (AYUDANTES) ---
+  Widget _tabEquipo() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      child: Center(child: Text(msg, style: TextStyle(color: colorTextoSecundario, fontStyle: FontStyle.italic))),
-    );
-  }
-
-  // --- SECCIÓN 3: AYUDANTES (Minimalista) ---
-  Widget _buildTabAyudantes() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          _buildLabel("Gestión de Equipo"),
+          _buildSectionLabel("Gestión de Equipo"),
           const SizedBox(height: 20),
-          _buildBotonAyudante(), // El botón que llama a _dialogAgregarAyudante
+          OutlinedButton.icon(
+            onPressed: _dialogAgregarAyudante,
+            icon: const Icon(Icons.person_add_rounded),
+            label: const Text("VINCULAR AYUDANTE"),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 50),
+              side: BorderSide(color: colorPB),
+              foregroundColor: colorPB,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
           const SizedBox(height: 20),
           Expanded(
             child: FutureBuilder(
-              // Usamos un query que traiga a los que tienen este negocio asignado
-              future: supabase
-                  .from('perfiles')
-                  .select('id, nombre, email')
-                  .eq('fk_negocio', widget.idNegocio),
+              future: supabase.from('perfiles').select().eq('fk_negocio', widget.idNegocio),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                 final ayudantes = snapshot.data as List? ?? [];
+                if (ayudantes.isEmpty) return const Center(child: Text("Aún no tienes ayudantes"));
                 
-                if (ayudantes.isEmpty) {
-                  return _buildEmptyState("Aún no tienes ayudantes vinculados");
-                }
-
-                return ListView.separated(
+                return ListView.builder(
                   itemCount: ayudantes.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) => _buildTileAyudante(ayudantes[i]),
+                  itemBuilder: (context, i) {
+                    final data = ayudantes[i];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: colorPB, 
+                          child: Text(
+                            (data['nombre'] != null && data['nombre'].toString().isNotEmpty) 
+                                ? data['nombre'][0].toUpperCase() 
+                                : 'U', 
+                            style: const TextStyle(color: Colors.white)
+                          )
+                        ),
+                        title: Text(data['nombre'] ?? 'Sin nombre'),
+                        subtitle: Text(data['email'] ?? ''),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.person_remove, color: Colors.redAccent),
+                          onPressed: () => _confirmarDesvinculacion(data['id'], data['nombre'] ?? 'Ayudante'),
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -362,266 +331,160 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
     );
   }
 
-  Widget _buildTileAyudante(Map<String, dynamic> data) {
+  // --- WIDGETS DE APOYO ---
+
+  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, int maxLines = 1, required bool isDark}) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, 
+        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
         borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 5)],
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
       ),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, color: colorPB),
+          labelText: label,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwitchMetodo(String titulo, String subtitulo, bool valor, String campo, IconData icon) {
+    return SwitchListTile(
+      activeColor: colorPB,
+      secondary: Icon(icon, color: valor ? colorPB : Colors.grey),
+      title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      subtitle: Text(subtitulo, style: const TextStyle(fontSize: 12)),
+      value: valor,
+      onChanged: (bool nuevoValor) => _updateToggle(campo, nuevoValor),
+    );
+  }
+
+  Widget _buildCardCuenta(Map<String, dynamic> m, bool isDark) {
+    bool activa = m['activo'] ?? true;
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: colorPB.withOpacity(0.1),
-          child: Text(data['nombre'][0].toUpperCase(), style: TextStyle(color: colorPB, fontWeight: FontWeight.bold)),
-        ),
-        title: Text(data['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(data['email'] ?? '', style: const TextStyle(fontSize: 12)),
-        trailing: IconButton(
-          icon: const Icon(Icons.person_remove_outlined, color: Colors.redAccent, size: 20),
-          onPressed: () => _confirmarDesvinculacion(data['id'], data['nombre']),
+        leading: Icon(Icons.account_balance, color: activa ? colorPB : Colors.grey),
+        title: Text(m['tipo_metodo'].toString().toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(m['numero_cuenta']),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Switch(
+              value: activa, 
+              activeColor: colorPB, 
+              onChanged: (v) => _toggleEstadoCuenta(m['id'], v)
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent), 
+              onPressed: () => _borrarMetodo(m['id'].toString())
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildBotonAyudante() {
-    return OutlinedButton.icon(
-      onPressed: _dialogAgregarAyudante,
-      icon: const Icon(Icons.person_add_rounded),
-      label: const Text("VINCULAR AYUDANTE"),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(double.infinity, 50),
-        side: BorderSide(color: colorPB),
-        foregroundColor: colorPB,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  // --- DIÁLOGOS ---
+
+  void _dialogMetodoPago() {
+    final tC = TextEditingController(), nC = TextEditingController(), hC = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Nueva Cuenta"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: tC, decoration: const InputDecoration(labelText: "Tipo (Nequi, Daviplata...)")),
+            TextField(controller: nC, decoration: const InputDecoration(labelText: "Número de cuenta"), keyboardType: TextInputType.number),
+            TextField(controller: hC, decoration: const InputDecoration(labelText: "Nombre del titular")),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+          ElevatedButton(
+            onPressed: () async {
+              if (tC.text.isEmpty || nC.text.isEmpty) return;
+              await supabase.from('metodos_pago').insert({
+                'fk_negocio': widget.idNegocio,
+                'tipo_metodo': tC.text,
+                'numero_cuenta': nC.text,
+                'nombre_titular': hC.text,
+                'activo': true,
+              });
+              if (context.mounted) Navigator.pop(context);
+              _cargarDatos();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: colorPB, foregroundColor: Colors.white),
+            child: const Text("Agregar"),
+          )
+        ],
       ),
     );
   }
-
-  // --- WIDGETS AUXILIARES Y LÓGICA ---
-
-  // Controladores para el diálogo de ayudantes
-  final _emailAyudanteController = TextEditingController();
 
   void _dialogAgregarAyudante() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Vincular Ayudante", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "Ingresa el correo del estudiante para que pueda gestionar este negocio.",
-              style: TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
-            _buildTextField(
-              controller: _emailAyudanteController,
-              label: "Correo electrónico",
-              icon: Icons.alternate_email,
-            ),
-          ],
+        title: const Text("Vincular Ayudante"),
+        content: TextField(
+          controller: _emailAyudanteController, 
+          decoration: const InputDecoration(labelText: "Correo electrónico"),
+          keyboardType: TextInputType.emailAddress,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.grey)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
           ElevatedButton(
-            onPressed: _vincularAyudante,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorPB,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
+            onPressed: () async {
+              if (_emailAyudanteController.text.trim().isEmpty) return;
+              await supabase
+                  .from('perfiles')
+                  .update({'fk_negocio': widget.idNegocio})
+                  .eq('email', _emailAyudanteController.text.trim());
+                  
+              _emailAyudanteController.clear();
+              if (context.mounted) Navigator.pop(context);
+              _cargarDatos(); // Sincroniza la lista de equipo de inmediato
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: colorPB, foregroundColor: Colors.white),
             child: const Text("Vincular"),
-          ),
+          )
         ],
       ),
     );
-  }
-
-  Future<void> _vincularAyudante() async {
-    final email = _emailAyudanteController.text.trim();
-    if (email.isEmpty) return;
-
-    try {
-      // 1. Buscamos si el usuario existe en la tabla perfiles
-      final userRes = await supabase
-          .from('perfiles')
-          .select()
-          .eq('email', email)
-          .maybeSingle();
-
-      if (userRes == null) {
-        _notificar("El usuario no está registrado en la app");
-        return;
-      }
-
-      // 2. Actualizamos su perfil para vincularlo al negocio
-      await supabase
-          .from('perfiles')
-          .update({'fk_negocio': widget.idNegocio})
-          .eq('email', email);
-
-      _emailAyudanteController.clear();
-      if (mounted) Navigator.pop(context);
-      
-      setState(() {}); // Refrescar la lista de ayudantes
-      _notificar("¡Ayudante vinculado correctamente!");
-      
-    } catch (e) {
-      debugPrint("Error vinculando: $e");
-      _notificar("Error al intentar vincular");
-    }
   }
 
   Future<void> _confirmarDesvinculacion(String userId, String nombre) async {
-    // Aquí podrías mostrar un pequeño diálogo de confirmación antes de proceder
     try {
-      await supabase
-          .from('perfiles')
-          .update({'fk_negocio': null}) // Quitamos la relación
-          .eq('id', userId);
-      
-      setState(() {}); // Refrescar lista
+      await supabase.from('perfiles').update({'fk_negocio': null}).eq('id', userId);
+      _cargarDatos();
       _notificar("$nombre ha sido removido del equipo");
     } catch (e) {
-      _notificar("No se pudo desvincular");
+      _notificar("Error al desvincular");
     }
   }
 
-  Future<void> _updateToggle(String campo, bool valor) async {
-    setState(() => _datosNegocio?[campo] = valor); // Update optimista
-    try {
-      await supabase.from('negocios').update({campo: valor}).eq('id', widget.idNegocio);
-    } catch (e) {
-      setState(() => _datosNegocio?[campo] = !valor); // Revertir si falla
-      _notificar("Error al actualizar estado");
-    }
-  }
+  // --- OTROS COMPONENTES ---
 
-  Future<void> _actualizarPerfil() async {
-    await supabase.from('negocios').update({
-      'nombre': _nameController.text,
-      'descripcion': _descController.text,
-    }).eq('id', widget.idNegocio);
-    _notificar("¡Cambios guardados!");
-  }
+  Widget _buildTabAyudantes(bool isDark) => _tabEquipo();
 
-  void _dialogMetodoPago() {
-    final tController = TextEditingController();
-    final nController = TextEditingController();
-    final hController = TextEditingController();
+  Widget _buildSectionLabel(String texto) => Text(texto.toUpperCase(), style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2));
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Nueva Cuenta", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: SizedBox( // Agregamos un SizedBox para darle un límite físico al diálogo
-          width: MediaQuery.of(context).size.width * 0.8,
-          child: Column(
-            mainAxisSize: MainAxisSize.min, // Esto evita que la columna intente ser infinita
-            children: [
-              TextField(
-                controller: tController, 
-                decoration: const InputDecoration(labelText: "Tipo (Nequi, Daviplata...)")
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: nController, 
-                decoration: const InputDecoration(labelText: "Número de cuenta"),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: hController, 
-                decoration: const InputDecoration(labelText: "Nombre del titular")
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text("Cancelar", style: TextStyle(color: Colors.grey))
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorPB,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
-            ),
-            onPressed: () async {
-              // Validación simple para evitar errores en Supabase
-              if (tController.text.isEmpty || nController.text.isEmpty) {
-                _notificar("Llena los campos obligatorios");
-                return;
-              }
-
-              try {
-                await supabase.from('metodos_pago').insert({
-                  'fk_negocio': widget.idNegocio,
-                  'tipo_metodo': tController.text,
-                  'numero_cuenta': nController.text,
-                  'nombre_titular': hController.text,
-                  'activo': true, 
-                });
-                
-                if (mounted) {
-                  Navigator.pop(context);
-                  _cargarDatos(); // Refresca la lista
-                }
-              } catch (e) {
-                _notificar("Error al guardar: $e");
-              }
-            }, 
-            child: const Text("Agregar", style: TextStyle(color: Colors.white))
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _toggleEstadoCuenta(dynamic idCuenta, bool nuevoEstado) async {
-    try {
-      final response = await Supabase.instance.client
-          .from('metodos_pago')
-          .update({'activo': nuevoEstado})
-          .eq('id', idCuenta)
-          .select(); // Agregamos .select() para confirmar que devolvió algo
-
-      if (response.isEmpty) {
-        print("⚠️ No se actualizó nada. Posible problema de RLS o ID incorrecto.");
-        return;
-      }
-
-      if (mounted) {
-        setState(() {
-          // Forzamos la comparación a String para evitar errores de tipo UUID/String
-          final index = _metodosPago.indexWhere((item) => item['id'].toString() == idCuenta.toString());
-          
-          if (index != -1) {
-            _metodosPago[index]['activo'] = nuevoEstado;
-          } else {
-            print("❌ No se encontró el ID $idCuenta en la lista local.");
-          }
-        });
-      }
-    } catch (e) {
-      print("Log de error: $e");
-    }
-  }
-
-  Future<void> _borrarMetodo(String id) async {
-    await supabase.from('metodos_pago').delete().eq('id', id);
-    _cargarDatos();
-  }
-
-  void _notificar(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: colorPB));
-  }
+  Widget _buildBotonGuardar() => SizedBox(
+    width: double.infinity, height: 55,
+    child: ElevatedButton(
+      onPressed: _actualizarPerfil,
+      style: ElevatedButton.styleFrom(backgroundColor: colorPB, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+      child: const Text("GUARDAR CONFIGURACIÓN", style: TextStyle(fontWeight: FontWeight.bold)),
+    ),
+  );
 
   Widget _buildSelectorImagenPerfil() {
     return Center(
@@ -629,18 +492,25 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
         children: [
           CircleAvatar(
             radius: 65, 
-            backgroundColor: Colors.grey[200],
+            backgroundColor: Colors.grey[300],
             backgroundImage: NetworkImage(_datosNegocio?['imagen_url'] ?? "https://via.placeholder.com/150")
           ),
           Positioned(
-            bottom: 0, right: 0,
-            child: CircleAvatar(
-              backgroundColor: colorPB,
-              child: IconButton(icon: const Icon(Icons.camera_alt, color: Colors.white, size: 20), onPressed: () {}),
+            bottom: 0, 
+            right: 0, 
+            child: GestureDetector(
+              onTap: _cambiarLogo, // Ahora ejecuta la función de cambio de logo
+              child: CircleAvatar(
+                backgroundColor: colorPB, 
+                radius: 20,
+                child: const Icon(Icons.camera_alt, color: Colors.white, size: 20)
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  void _notificar(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: colorPB));
 }

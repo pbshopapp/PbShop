@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
 import 'package:pbshop/pantallas/home_page.dart';
+import 'package:pbshop/pantallas/nueva_password_page.dart'; // Asegúrate de crear este archivo
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -11,18 +12,33 @@ class login_page extends StatefulWidget {
   @override
   State<login_page> createState() => _LoginPageState();
 }
+
 class _LoginPageState extends State<login_page> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _telefonoController = TextEditingController();
 
-  
   bool _isLoading = false;
-  // CAMBIO 1: Ahora _isLogin empieza en 'true' para mostrar primero el inicio de sesión
-  bool _isLogin = true; 
+  bool _isLogin = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Escucha el evento de recuperación de contraseña desde el link del correo
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NuevaPasswordPage()),
+          );
+        }
+      }
+    });
+  }
 
   String _extraerNombreDelCorreo(String email) {
-    String parteInicial = email.split('@')[0]; 
+    String parteInicial = email.split('@')[0];
     List<String> palabras = parteInicial.split('.');
     return palabras.map((p) {
       if (p.isEmpty) return "";
@@ -30,46 +46,35 @@ class _LoginPageState extends State<login_page> {
     }).join(' ');
   }
 
-  // FUNCIÓN PARA INICIAR SESIÓN
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
-    
     try {
-      // 1. Autenticación en Supabase
       final response = await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (response.user != null) {
-        // 2. Intento de actualizar el Token FCM (encapsulado para que no rompa el login)
         try {
           String? fcmToken = await FirebaseMessaging.instance.getToken().timeout(
             const Duration(seconds: 5),
           );
-          
           if (fcmToken != null) {
-            await Supabase.instance.client
-                .from('fcm_tokens')
-                .upsert({
-                  'usuario_id': response.user!.id,
-                  'token': fcmToken,
-                }, onConflict: 'token'); // Si el token ya existe, solo actualiza la fecha
-            print("Token registrado en el clúster de dispositivos");
+            await Supabase.instance.client.from('fcm_tokens').upsert({
+              'usuario_id': response.user!.id,
+              'token': fcmToken,
+            }, onConflict: 'token');
           }
         } catch (e) {
-          print("Error no crítico guardando el token: $e");
-          // No detenemos el flujo, el usuario aún puede usar la app sin notificaciones
+          print("Error no crítico FCM: $e");
         }
 
-        // 3. Obtener el rol del usuario
         final perfil = await Supabase.instance.client
             .from('perfiles')
             .select('rol')
             .eq('id', response.user!.id)
             .maybeSingle();
 
-        // 4. Verificación de seguridad antes de navegar o hacer setState
         if (!mounted) return;
 
         if (perfil != null && perfil['rol'] == 'admin_negocio') {
@@ -78,32 +83,26 @@ class _LoginPageState extends State<login_page> {
             MaterialPageRoute(builder: (context) => const admin_neg_page()),
           );
         } else {
-          // Navegamos a la página, NO a la clase que tiene el MaterialApp
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (context) => const home_page()), 
+            MaterialPageRoute(builder: (context) => const home_page()),
             (route) => false,
           );
         }
       }
     } on AuthException catch (error) {
       if (mounted) _mostrarError(error.message);
-    } catch (error) {
-      print("Error inesperado: $error");
-      if (mounted) _mostrarError("Error al conectar con el servidor");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // TU FUNCIÓN DE REGISTRO (Se queda casi igual)
   Future<void> _signUp() async {
     final email = _emailController.text.trim();
     if (!email.endsWith('@pascualbravo.edu.co')) {
       _mostrarError("Usa tu correo institucional");
       return;
     }
-    // ... validación de teléfono ...
     setState(() => _isLoading = true);
     try {
       await Supabase.instance.client.auth.signUp(
@@ -119,17 +118,39 @@ class _LoginPageState extends State<login_page> {
     } on AuthException catch (error) {
       _mostrarError(error.message);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _mostrarError(String mensaje) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje), backgroundColor: Colors.red));
-  void _mostrarExito(String mensaje) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje), backgroundColor: Colors.green));
+  Future<void> _recuperarPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.endsWith('@pascualbravo.edu.co')) {
+      _mostrarError("Ingresa tu correo institucional para recuperarla");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'com.pbshop.app://reset-callback/',
+      );
+      _mostrarExito("Enlace enviado a tu correo institucional");
+    } on AuthException catch (error) {
+      _mostrarError(error.message);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _mostrarError(String mensaje) => ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensaje), backgroundColor: Colors.red));
+  void _mostrarExito(String mensaje) => ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensaje), backgroundColor: Colors.green));
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // CAMBIO 2: Título dinámico según el estado
       appBar: AppBar(
         title: Text(_isLogin ? "Iniciar Sesión" : "Crear Cuenta PB Shop"),
         backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
@@ -139,39 +160,41 @@ class _LoginPageState extends State<login_page> {
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            const Icon(
-              Icons.account_circle, 
-              size: 80, 
-              color: Color.fromRGBO(0, 180, 195, 1)
-            ),
+            const Icon(Icons.account_circle,
+                size: 80, color: Color.fromRGBO(0, 180, 195, 1)),
             const SizedBox(height: 30),
-            
-            // CAMPO EMAIL
             TextField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
-                labelText: 'Correo @pascualbravo.edu.co', 
-                border: OutlineInputBorder(), 
-                prefixIcon: Icon(Icons.email)
-              ),
+                  labelText: 'Correo @pascualbravo.edu.co',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.email)),
             ),
             const SizedBox(height: 15),
-            
-            // CAMPO PASSWORD
             TextField(
               controller: _passwordController,
               obscureText: true,
               decoration: const InputDecoration(
-                labelText: 'Contraseña', 
-                border: OutlineInputBorder(), 
-                prefixIcon: Icon(Icons.lock)
-              ),
+                  labelText: 'Contraseña',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock)),
             ),
-            const SizedBox(height: 15),
+            
+            if (_isLogin)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _recuperarPassword,
+                  child: const Text(
+                    "¿Olvidaste tu contraseña?",
+                    style: TextStyle(color: Color.fromRGBO(0, 140, 155, 1), fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
 
-            // CAMPO TELÉFONO (Solo se muestra en modo Registro)
             if (!_isLogin) ...[
+              const SizedBox(height: 15),
               TextField(
                 controller: _telefonoController,
                 keyboardType: TextInputType.phone,
@@ -185,15 +208,11 @@ class _LoginPageState extends State<login_page> {
                   prefixIcon: const Icon(Icons.phone),
                 ),
               ),
-              const SizedBox(height: 20),
             ],
-
-            const SizedBox(height: 10),
-
-            if (_isLoading) 
+            const SizedBox(height: 20),
+            if (_isLoading)
               const CircularProgressIndicator()
             else ...[
-              // BOTÓN PRINCIPAL
               ElevatedButton(
                 onPressed: () {
                   if (_isLogin) {
@@ -210,24 +229,18 @@ class _LoginPageState extends State<login_page> {
                   backgroundColor: const Color.fromRGBO(0, 180, 195, 1),
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
                 ),
                 child: Text(_isLogin ? "ENTRAR" : "REGISTRARME"),
               ),
-              
               const SizedBox(height: 15),
-              
-              // BOTÓN PARA CAMBIAR DE MODO
               TextButton(
-                onPressed: () {
-                  setState(() {
-                    _isLogin = !_isLogin;
-                  });
-                },
+                onPressed: () => setState(() => _isLogin = !_isLogin),
                 child: Text(
-                  _isLogin 
-                    ? "¿No tienes cuenta? Regístrate aquí" 
-                    : "¿Ya tienes cuenta? Inicia sesión",
+                  _isLogin
+                      ? "¿No tienes cuenta? Regístrate aquí"
+                      : "¿Ya tienes cuenta? Inicia sesión",
                   style: const TextStyle(color: Color.fromRGBO(0, 140, 155, 1)),
                 ),
               ),
