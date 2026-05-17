@@ -478,15 +478,42 @@ class _PedidosNegocioPageState extends State<pedidos_neg_page> with SingleTicker
                       itemCount: snapshot.data!.length,
                       itemBuilder: (context, index) {
                         final item = snapshot.data![index];
+                        
+                        // 1. BLINDAJE: Extraemos la relación de productos de forma segura
+                        final Map<String, dynamic>? productoData = item['productos'] as Map<String, dynamic>?;
+
+                        // 2. Extracción de valores individuales con plan de respaldo (Fallback)
+                        final String nombreProducto = productoData?['nombre']?.toString() ?? 'Producto no disponible';
+                        final String? urlImagen = productoData?['imagen_url']?.toString();
+
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.network(item['productos']['imagen_url'], width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.fastfood)),
+                            child: urlImagen != null && urlImagen.isNotEmpty
+                                ? Image.network(
+                                    urlImagen, 
+                                    width: 50, 
+                                    height: 50, 
+                                    fit: BoxFit.cover, 
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.fastfood),
+                                  )
+                                : Container(
+                                    width: 50,
+                                    height: 50,
+                                    color: Colors.grey[200],
+                                    child: const Icon(Icons.fastfood, color: Colors.grey),
+                                  ),
                           ),
-                          title: Text(item['productos']['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          title: Text(
+                            nombreProducto, 
+                            style: const TextStyle(fontWeight: FontWeight.bold)
+                          ),
                           subtitle: Text("Cantidad: ${item['cantidad']}"),
-                          trailing: Text("\$${(item['precio_unitario'] * item['cantidad']).toInt()}", style: TextStyle(color: _colorInstitucional, fontWeight: FontWeight.bold)),
+                          trailing: Text(
+                            "\$${((item['precio_unitario'] ?? 0) * (item['cantidad'] ?? 0)).toInt()}", 
+                            style: TextStyle(color: _colorInstitucional, fontWeight: FontWeight.bold)
+                          ),
                         );
                       },
                     );

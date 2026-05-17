@@ -10,16 +10,15 @@ class CartaNegocio extends StatelessWidget {
   // Función para obtener el promedio de estrellas desde Supabase
   Future<double> _obtenerPromedioEstrellas() async {
     try {
-      final res = await Supabase.instance.client
+        final res = await Supabase.instance.client
           .from('resenas')
           .select('puntuacion')
-          .eq('fk_negocio', negocio['id']);
-      
-      if (res == null || (res as List).isEmpty) return 0.0;
-      
-      final lista = res as List;
-      double suma = lista.fold(0, (prev, element) => prev + (element['puntuacion'] ?? 0));
-      return suma / lista.length;
+          .eq('fk_negocio', negocio['id']) as List<dynamic>;
+
+        if (res.isEmpty) return 0.0;
+
+        double suma = res.fold(0.0, (prev, element) => prev + (element['puntuacion'] ?? 0));
+        return suma / res.length;
     } catch (e) {
       return 0.0;
     }

@@ -15,10 +15,68 @@ class product_page extends StatefulWidget {
 
 class _product_pageState extends State<product_page> {
   bool _estaProcesando = false;
+  bool _puedeResenar = false;
+  bool _esEdicion = false;
+  String? _idPedidoMapeado;
+  String? _idResenaExistente;
+  double _estrellasPrevias = 0;
+  String _comentarioPrevio = "";
+  
   final f = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
 
   // Color institucional turquesa
   final Color _colorInstitucional = const Color.fromRGBO(0, 180, 195, 1);
+
+  @override
+  void initState() {
+    super.initState();
+    _verificarCompraDelProducto();
+  }
+
+  Future<void> _verificarCompraDelProducto() async {
+    try {
+      final usuarioId = Supabase.instance.client.auth.currentUser?.id;
+      if (usuarioId == null) return;
+
+      final List<dynamic> compraData = await Supabase.instance.client
+          .from('detalles_pedido')
+          .select('fk_pedido, pedidos!inner(id_usuario, estado)')
+          .eq('fk_producto', widget.producto['id'])
+          .eq('pedidos.id_usuario', usuarioId)
+          .eq('pedidos.estado', 'entregado')
+          .limit(1);
+
+      if (compraData.isNotEmpty && mounted) {
+        _idPedidoMapeado = compraData[0]['fk_pedido'].toString();
+
+        final List<dynamic> resenaData = await Supabase.instance.client
+            .from('resenas')
+            .select('id, puntuacion, comentario')
+            .eq('fk_producto', widget.producto['id'])
+            .eq('fk_usuario', usuarioId)
+            .limit(1);
+
+        if (mounted) {
+          setState(() {
+            _puedeResenar = true; 
+            if (resenaData.isNotEmpty) {
+              _esEdicion = true;
+              _idResenaExistente = resenaData[0]['id'].toString();
+              _estrellasPrevias = (resenaData[0]['puntuacion'] as num).toDouble();
+              _comentarioPrevio = resenaData[0]['comentario'] ?? "";
+            } else {
+              _esEdicion = false;
+              _idResenaExistente = null;
+              _estrellasPrevias = 0;
+              _comentarioPrevio = "";
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error verificando compra o reseña del producto: $e");
+    }
+  }
 
   Future<List<String>> _obtenerFotos() async {
     try {
@@ -36,6 +94,116 @@ class _product_pageState extends State<product_page> {
       return listaUrls;
     } catch (e) {
       return [widget.producto['imagen_url'] ?? ''];
+    }
+  }
+
+  void _mostrarModalResena(bool isDarkMode, Color colorPB) async {
+    final TextEditingController controller = TextEditingController(text: _esEdicion ? _comentarioPrevio : "");
+    double estrellas = _esEdicion ? _estrellasPrevias : 0;
+
+    // 1. Esperamos el resultado directo del diálogo (un Map con los nuevos datos)
+    final Map<String, dynamic>? resultado = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          _esEdicion ? "Actualizar mi opinión" : "¿Qué tal estuvo el producto?", 
+          textAlign: TextAlign.center,
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold)
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RatingBarCustom(
+              initialRating: estrellas.toInt(),
+              onRatingSelected: (val) => estrellas = val.toDouble(),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: controller,
+              maxLines: 2,
+              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+              decoration: InputDecoration(
+                hintText: "Escribe tu opinión sobre este producto...",
+                hintStyle: const TextStyle(color: Colors.grey),
+                filled: true, 
+                fillColor: isDarkMode ? Colors.white10 : Colors.grey[100],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null), 
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey))
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (estrellas == 0) return;
+
+              final comentarioTexto = controller.text.trim();
+
+              try {
+                if (_esEdicion) {
+                  // MODO EDICIÓN
+                  await Supabase.instance.client
+                      .from('resenas')
+                      .update({
+                        'puntuacion': estrellas.toInt(),
+                        'comentario': comentarioTexto,
+                      })
+                      .eq('id', _idResenaExistente!);
+                  
+                  if (context.mounted) {
+                    // Retornamos los datos frescos para actualizar el estado local
+                    Navigator.pop(context, {
+                      'puntuacion': estrellas,
+                      'comentario': comentarioTexto,
+                      'id_resena': _idResenaExistente,
+                    });
+                  }
+                } else {
+                  // MODO INSERCIÓN
+                  final nuevaResena = await Supabase.instance.client.from('resenas').insert({
+                    'fk_pedido': _idPedidoMapeado,
+                    'puntuacion': estrellas.toInt(),
+                    'comentario': comentarioTexto,
+                    'fk_usuario': Supabase.instance.client.auth.currentUser!.id,
+                    'fk_producto': widget.producto['id'], 
+                  }).select('id').single(); // Traemos el ID generado por la BD
+                  
+                  if (context.mounted) {
+                    Navigator.pop(context, {
+                      'puntuacion': estrellas,
+                      'comentario': comentarioTexto,
+                      'id_resena': nuevaResena['id'].toString(),
+                    });
+                  }
+                }
+              } catch (e) {
+                debugPrint("Error al procesar la reseña: $e");
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: colorPB),
+            child: Text(
+              _esEdicion ? "ACTUALIZAR" : "ENVIAR", 
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // 2. Si el diálogo retornó datos válidos, forzamos el redibujado local INMEDIATO
+    if (resultado != null && mounted) {
+      setState(() {
+        _esEdicion = true; // Ya tiene una reseña guardada o actualizada
+        _estrellasPrevias = (resultado['puntuacion'] as num).toDouble();
+        _comentarioPrevio = resultado['comentario'].toString();
+        _idResenaExistente = resultado['id_resena'].toString();
+      });
     }
   }
 
@@ -161,7 +329,7 @@ class _product_pageState extends State<product_page> {
           Icon(Icons.storefront, size: 18, color: _colorInstitucional),
           const SizedBox(width: 8),
           Text(
-            "Vendido por ${widget.producto['nombre_negocio']}", 
+            "Vendido por ${widget.producto['nombre_negocio'] ?? 'Emprendedor PB'}", 
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)
           ),
         ],
@@ -178,69 +346,62 @@ class _product_pageState extends State<product_page> {
       ),
       child: SafeArea(
         child: ElevatedButton(
-  // Si está procesando en la BD, lo deshabilitamos por completo nativamente pasando null
-  onPressed: _estaProcesando 
-      ? null 
-      : () {
-          // 1. EXTRAER ESTADO DE APERTURA (Asegúrate de cómo se llama en tu widget, ej: widget.producto)
-          final bool estaAbierto = widget.producto['esta_abierto'] ?? true;
+          onPressed: _estaProcesando 
+              ? null 
+              : () {
+                  final bool estaAbierto = widget.producto['esta_abierto'] ?? true;
 
-          // 2. CANDADO DE SEGURIDAD: Validar PRIMERO si está cerrado antes de alterar estados
-          if (!estaAbierto) {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                title: const Row(
-                  children: [
-                    Icon(Icons.store_rounded, color: Colors.redAccent),
-                    SizedBox(width: 10),
-                    Text("Tienda Cerrada"),
-                  ],
-                ),
-                content: const Text(
-                  "Lo sentimos, este emprendimiento se encuentra fuera de su horario de atención y no está recibiendo pedidos en este momento.",
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      "Entendido", 
-                      style: TextStyle(color: Color.fromRGBO(0, 180, 195, 1), fontWeight: FontWeight.bold)
-                    ),
-                  ),
-                ],
+                  if (!estaAbierto) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        title: const Row(
+                          children: [
+                            Icon(Icons.store_rounded, color: Colors.redAccent),
+                            SizedBox(width: 10),
+                            Text("Tienda Cerrada"),
+                          ],
+                        ),
+                        content: const Text(
+                          "Lo sentimos, este emprendimiento se encuentra fuera de su horario de atención y no está recibiendo pedidos en este momento.",
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text(
+                              "Entendido", 
+                              style: TextStyle(color: Color.fromRGBO(0, 180, 195, 1), fontWeight: FontWeight.bold)
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                    return; 
+                  }
+
+                  _agregarAlPedido(context);
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: (widget.producto['esta_abierto'] ?? true) 
+                ? _colorInstitucional 
+                : Colors.grey[400], 
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 60),
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          child: _estaProcesando 
+            ? const SizedBox(
+                height: 25, 
+                width: 25, 
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)
+              )
+            : Text(
+                (widget.producto['esta_abierto'] ?? true) ? "Agregar al carrito" : "Local Cerrado",
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
               ),
-            );
-            
-            // Rompemos la ejecución de inmediato. Al estar '_estaProcesando' en false, 
-            // el botón conserva su estado natural y no se queda congelado.
-            return; 
-          }
-
-          // 3. SI ESTÁ ABIERTO: Procedemos con tu flujo normal de compra
-          _agregarAlPedido(context);
-        },
-  style: ElevatedButton.styleFrom(
-    backgroundColor: (widget.producto['esta_abierto'] ?? true) 
-        ? _colorInstitucional 
-        : Colors.grey[400], // Se pone gris si está cerrado
-    foregroundColor: Colors.white,
-    minimumSize: const Size(double.infinity, 60),
-    elevation: 0,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-  ),
-  child: _estaProcesando 
-    ? const SizedBox(
-        height: 25, 
-        width: 25, 
-        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)
-      )
-    : Text(
-        (widget.producto['esta_abierto'] ?? true) ? "Agregar al carrito" : "Local Cerrado",
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-      ),
-),
+        ),
       ),
     );
   }
@@ -264,6 +425,8 @@ class _product_pageState extends State<product_page> {
           margin: const EdgeInsets.all(20),
         )
       );
+    } catch (e) {
+      // Manejo de error
     } finally {
       setState(() => _estaProcesando = false);
     }
@@ -276,45 +439,126 @@ class _product_pageState extends State<product_page> {
           .stream(primaryKey: ['id'])
           .eq('fk_producto', widget.producto['id']),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(25),
-            decoration: BoxDecoration(
-              color: esOscuro ? Colors.white.withOpacity(0.05) : Colors.grey[50], 
-              borderRadius: BorderRadius.circular(20)
-            ),
-            child: const Center(
-              child: Text("Aún no hay opiniones. ¡Sé el primero!", style: TextStyle(fontStyle: FontStyle.italic))
-            ),
-          );
-        }
+        List<Map<String, dynamic>> resenas = snapshot.data ?? [];
+
         return Column(
-          children: snapshot.data!.map((r) => Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: esOscuro ? Colors.white.withOpacity(0.05) : Colors.grey[50],
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                mostrarEstrellas(r['puntuacion'] ?? 0),
-                const SizedBox(height: 10),
-                Text(
-                  r['comentario'] ?? "", 
-                  style: TextStyle(
-                    fontSize: 14, 
-                    fontStyle: FontStyle.italic,
-                    color: esOscuro ? Colors.grey[300] : Colors.black87
-                  )
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // --- BOTÓN DINÁMICO DE CALIFICACIÓN O EDICIÓN ---
+            if (_puedeResenar) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20.0),
+                child: ElevatedButton.icon(
+                  onPressed: () => _mostrarModalResena(esOscuro, _colorInstitucional),
+                  icon: Icon(_esEdicion ? Icons.edit_note_rounded : Icons.rate_review_rounded, color: Colors.white),
+                  label: Text(
+                    _esEdicion ? "Editar mi reseña" : "Calificar este producto", 
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _esEdicion ? Colors.amber[800] : _colorInstitucional,
+                    minimumSize: const Size(double.infinity, 52),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    elevation: 0,
+                  ),
                 ),
-              ],
-            ),
-          )).toList(),
+              ),
+            ],
+
+            // --- MANEJO DE ESTADO VACÍO O LISTADO ---
+            if (resenas.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(25),
+                decoration: BoxDecoration(
+                  color: esOscuro ? Colors.white.withOpacity(0.05) : Colors.grey[50], 
+                  borderRadius: BorderRadius.circular(20)
+                ),
+                child: const Center(
+                  child: Text("Aún no hay opiniones. ¡Sé el primero!", style: TextStyle(fontStyle: FontStyle.italic))
+                ),
+              )
+            else
+              Column(
+                children: resenas.map((r) => Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: esOscuro ? Colors.white.withOpacity(0.05) : Colors.grey[50],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      mostrarEstrellas(r['puntuacion'] ?? 0),
+                      const SizedBox(height: 10),
+                      Text(
+                        r['comentario'] ?? "", 
+                        style: TextStyle(
+                          fontSize: 14, 
+                          fontStyle: FontStyle.italic,
+                          color: esOscuro ? Colors.grey[300] : Colors.black87
+                        )
+                      ),
+                    ],
+                  ),
+                )).toList(),
+              ),
+          ],
         );
       },
+    );
+  }
+}
+
+class RatingBarCustom extends StatefulWidget {
+  final int initialRating; // 👈 Agregamos propiedad para recibir nota inicial
+  final Function(double) onRatingSelected;
+  
+  const RatingBarCustom({
+    super.key, 
+    this.initialRating = 0, 
+    required this.onRatingSelected
+  });
+
+  @override
+  State<RatingBarCustom> createState() => _RatingBarCustomState();
+}
+
+class _RatingBarCustomState extends State<RatingBarCustom> {
+  int _rating = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _rating = widget.initialRating; // 👈 Sincronizamos las estrellas con el estado inicial
+  }
+
+  @override
+  void didUpdateWidget(covariant RatingBarCustom oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialRating != widget.initialRating) {
+      _rating = widget.initialRating;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(5, (index) {
+        return IconButton(
+          icon: Icon(
+            index < _rating ? Icons.star_rounded : Icons.star_outline_rounded,
+            color: Colors.amber,
+            size: 36,
+          ),
+          onPressed: () {
+            setState(() => _rating = index + 1);
+            widget.onRatingSelected(_rating.toDouble());
+          },
+        );
+      }),
     );
   }
 }

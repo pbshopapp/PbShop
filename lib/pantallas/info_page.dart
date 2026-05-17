@@ -8,7 +8,6 @@ import 'package:pbshop/pantallas/login_page.dart';
 import 'package:pbshop/pantallas/mi_cuenta.dart';
 import 'package:pbshop/pantallas/pedidos_neg_page.dart';
 import 'package:pbshop/pantallas/admin_neg_page.dart';
-import 'package:pbshop/servicios/ObtenerDatosUser.dart';
 import 'package:pbshop/widgets/widgetsInfo.dart';
 
 class info_page extends StatefulWidget {

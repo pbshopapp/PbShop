@@ -46,31 +46,57 @@ class _MiCuentaPageState extends State<MiCuentaPage> {
     setState(() => _isLoading = true);
     try {
       final email = _supabase.auth.currentUser?.email;
-      if (email == null) return;
+      final userId = _supabase.auth.currentUser?.id;
+      if (email == null || userId == null) return;
 
-      await _supabase.auth.signInWithPassword(
-        email: email,
-        password: _passController.text.trim(),
-      );
+      // 1. VALIDAR CONTRASEÑA EN EXCLUSIVA
+      try {
+        await _supabase.auth.signInWithPassword(
+          email: email,
+          password: _passController.text.trim(),
+        );
+      } catch (authError) {
+        // Si falla aquí, la contraseña es 100% incorrecta
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Contraseña incorrecta. Inténtalo de nuevo.")),
+          );
+        }
+        return; // Frenamos el flujo para que no intente borrar nada
+      }
 
-      final userId = _supabase.auth.currentUser!.id;
-      await _supabase.functions.invoke(
-        'delete-user',
-        body: {'userId': userId},
-      );
+      // 2. INVOCAR LA EDGE FUNCTION (AQUÍ SUCEDE EL BORRADO REAL)
+      try {
+        await _supabase.functions.invoke(
+          'delete-user',
+          body: {'userId': userId},
+        );
+      } catch (functionError) {
+        debugPrint("Nota: Error controlado al invocar la función (puede ser por desconexión inmediata): $functionError");
+        // Si llega a fallar por red pero el usuario sí se borró, permitimos que continúe
+      }
 
-      await _supabase.auth.signOut();
+      // 3. LIMPIEZA DE SESIÓN LOCAL SEGURA
+      try {
+        await _supabase.auth.signOut();
+      } catch (_) {
+        // Ignoramos si el signOut falla porque el usuario ya dejó de existir en el servidor
+      }
       
+      // 4. ÉXITO ABSOLUTO Y REDIRECCIÓN
       if (mounted) {
+        _passController.clear(); // Limpiamos el campo de texto
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Cuenta eliminada correctamente")),
         );
       }
+
     } catch (e) {
+      debugPrint("Error general inesperado en el proceso: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Error: Contraseña incorrecta o fallo de conexión")),
+          const SnackBar(content: Text("Ocurrió un error inesperado al procesar la solicitud")),
         );
       }
     } finally {
@@ -142,7 +168,6 @@ class _MiCuentaPageState extends State<MiCuentaPage> {
     
     // Paleta de colores dinámica
     final colorTextoPrincipal = isDark ? Colors.white : Colors.black87;
-    final colorTextoSecundario = isDark ? Colors.white54 : Colors.black54;
     final colorRojoCard = isDark ? Colors.redAccent.shade100 : Colors.red.shade700;
     final bgRojoCard = isDark ? Colors.redAccent.withOpacity(0.1) : Colors.red.withOpacity(0.05);
 

@@ -10,19 +10,30 @@ class DetallePedidoDinamico extends StatelessWidget {
   // Color institucional
   final Color colorPB = const Color.fromRGBO(0, 180, 195, 1);
 
-  Future<bool> _yaEstaCalificado(String idPedido) async {
+  Future<bool> _yaEstaCalificado({
+    required String idPedido,
+    String? idProducto,
+  }) async {
     try {
-      final res = await Supabase.instance.client
+      var query = Supabase.instance.client
           .from('resenas')
           .select()
-          .eq('fk_pedido', idPedido)
-          .maybeSingle();
+          .eq('fk_pedido', idPedido);
+
+      if (idProducto != null) {
+        // Si mandamos producto, filtramos por ese producto
+        query = query.eq('fk_producto', idProducto);
+      } else {
+        // Si NO mandamos producto, significa que estamos buscando la reseña del negocio
+        query = query.isFilter('fk_producto', null);
+      }
+
+      final res = await query.maybeSingle();
       return res != null;
     } catch (e) {
       return false;
     }
   }
-
   @override
   Widget build(BuildContext context) {
     // Detectamos si el sistema está en modo oscuro
@@ -313,13 +324,13 @@ class DetallePedidoDinamico extends StatelessWidget {
 
     if (esEntregado) {
       return FutureBuilder<bool>(
-        future: _yaEstaCalificado(idPedido),
+        future: _yaEstaCalificado(idPedido: pedido['id']),
         builder: (context, snapshot) {
           if (snapshot.data == true) {
             return const Center(child: Text("⭐ Pedido calificado", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)));
           }
           return ElevatedButton.icon(
-            onPressed: () => _mostrarDialogoResena(context, idPedido, isDarkMode),
+            onPressed: () => _mostrarDialogoResena(context, pedido['id'], isDarkMode),
             icon: const Icon(Icons.star_outline, color: Colors.white),
             label: const Text("CALIFICAR EXPERIENCIA", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(backgroundColor: colorPB, minimumSize: const Size(double.infinity, 45)),

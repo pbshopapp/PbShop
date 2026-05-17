@@ -23,7 +23,12 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
   // Controladores de texto
   late TextEditingController _nameController;
   late TextEditingController _descController;
-  late TextEditingController _ubicacionController;  // Nuevo campo
+  late TextEditingController _ubicacionController;
+  
+  // NUEVOS: Controladores para Horarios
+  late TextEditingController _aperturaController;
+  late TextEditingController _cierreController;
+  
   final _emailAyudanteController = TextEditingController();
 
   @override
@@ -37,6 +42,8 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
     _nameController.dispose();
     _descController.dispose();
     _ubicacionController.dispose();
+    _aperturaController.dispose(); // Nuevo
+    _cierreController.dispose();   // Nuevo
     _emailAyudanteController.dispose();
     super.dispose();
   }
@@ -55,18 +62,49 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
         setState(() {
           _datosNegocio = res;
           _metodosPago = res['metodos_pago'] ?? [];
-          // Ordenamos por ID de forma fija para que no salten de posición al actualizar
           _metodosPago.sort((a, b) => a['id'].compareTo(b['id']));
           
           _nameController = TextEditingController(text: res['nombre'] ?? "");
           _descController = TextEditingController(text: res['descripcion'] ?? "");
-          _ubicacionController = TextEditingController(text: res['ubicacion'] ?? ""); // Nuevo
+          _ubicacionController = TextEditingController(text: res['ubicacion'] ?? "");
+          
+          // NUEVO: Cargar los horarios guardados en la base de datos
+          _aperturaController = TextEditingController(text: res['hora_apertura'] ?? "");
+          _cierreController = TextEditingController(text: res['hora_cierre'] ?? "");
+          
           _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint("Error cargando datos: $e");
       _notificar("Error al conectar con el servidor");
+    }
+  }
+
+  // NUEVO: Función auxiliar para abrir el selector de hora nativo y darle formato 12H (AM/PM)
+  Future<void> _seleccionarHora(BuildContext context, TextEditingController controller) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: colorPB,
+              primary: colorPB,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && mounted) {
+      // ignore: use_build_context_synchronously
+      final horaFormateada = picked.format(context); // Esto devuelve automáticamente ej: "8:00 AM" o "5:30 PM"
+      setState(() {
+        controller.text = horaFormateada;
+      });
     }
   }
 
@@ -83,13 +121,9 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
         final fileName = 'logo_${DateTime.now().millisecondsSinceEpoch}.jpg';
         final path = '${widget.idNegocio}/$fileName';
 
-        // Subir al bucket 'logos_negocios'
         await supabase.storage.from('logos_negocios').upload(path, file);
-        
-        // Obtener URL pública
         final String publicUrl = supabase.storage.from('logos_negocios').getPublicUrl(path);
 
-        // Actualizar tabla negocios
         await supabase.from('negocios').update({'imagen_url': publicUrl}).eq('id', widget.idNegocio);
         
         setState(() {
@@ -107,10 +141,12 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
 
   Future<void> _actualizarPerfil() async {
     try {
+      // NUEVO: Ahora también envía los campos de hora_apertura y hora_cierre a Supabase
       await supabase.from('negocios').update({
         'nombre': _nameController.text,
         'descripcion': _descController.text,
-        'ubicacion': _ubicacionController.text, // Nuevo
+        'ubicacion': _ubicacionController.text,
+        'horario': '${_aperturaController.text} - ${_cierreController.text}', // Guarda el horario completo en un solo campo para compatibilidad con la lógica actual
       }).eq('id', widget.idNegocio);
       _notificar("¡Cambios guardados con éxito!");
     } catch (e) {
@@ -123,13 +159,12 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
     try {
       await supabase.from('negocios').update({campo: valor}).eq('id', widget.idNegocio);
     } catch (e) {
-      _cargarDatos(); // Revertir si falla
+      _cargarDatos(); 
       _notificar("Error al actualizar estado");
     }
   }
 
   Future<void> _toggleEstadoCuenta(dynamic idCuenta, bool nuevoEstado) async {
-    // Cambio local inmediato para evitar saltos o retrasos visuales
     setState(() {
       final index = _metodosPago.indexWhere((m) => m['id'] == idCuenta);
       if (index != -1) {
@@ -140,7 +175,7 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
     try {
       await supabase.from('metodos_pago').update({'activo': nuevoEstado}).eq('id', idCuenta);
     } catch (e) {
-      _cargarDatos(); // Si falla el servidor, revertimos al estado real
+      _cargarDatos(); 
       _notificar("Error al cambiar estado de cuenta");
     }
   }
@@ -168,8 +203,8 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          toolbarHeight: 75, // Altura extra para desahogar las pestañas y que se lean completas
-          title: const Text("Mi Negocio", style: TextStyle(fontWeight: FontWeight.bold, color:  Colors.white)),
+          toolbarHeight: 75, 
+          title: const Text("Mi Negocio", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
           centerTitle: true,
           bottom: TabBar(
             indicatorColor: isDark ? const Color.fromARGB(255, 36, 167, 179): Colors.white,
@@ -178,7 +213,7 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
             labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 13),
             tabs: const [
-              Tab(icon: Icon(Icons.store_rounded, size: 22), text: "Perfil",),
+              Tab(icon: Icon(Icons.store_rounded, size: 22), text: "Perfil"),
               Tab(icon: Icon(Icons.payments_rounded, size: 22), text: "Pagos"),
               Tab(icon: Icon(Icons.badge_rounded, size: 22), text: "Equipo"),
             ],
@@ -195,11 +230,12 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
     );
   }
 
-  // --- SECCIÓN 1: PERFIL ---
+  // --- SECCIÓN 1: PERFIL (MODIFICADA) ---
   Widget _buildTabPerfil(bool isDark) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSelectorImagenPerfil(),
           const SizedBox(height: 35),
@@ -219,11 +255,38 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
           ),
           const SizedBox(height: 18),
           _buildTextField(
-            controller: _ubicacionController, // Control de ubicación mapeado
+            controller: _ubicacionController, 
             label: "Ubicación en la u (Ej: Bloque P13)",
             icon: Icons.location_on_rounded,
             isDark: isDark,
           ),
+          
+          // NUEVO: Título y sección visual para Horarios de atención
+          const SizedBox(height: 25),
+          _buildSectionLabel("Horario de atención"),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildTimeField(
+                  controller: _aperturaController,
+                  label: "Abre a las",
+                  isDark: isDark,
+                  onTap: () => _seleccionarHora(context, _aperturaController),
+                ),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: _buildTimeField(
+                  controller: _cierreController,
+                  label: "Cierra a las",
+                  isDark: isDark,
+                  onTap: () => _seleccionarHora(context, _cierreController),
+                ),
+              ),
+            ],
+          ),
+          
           const SizedBox(height: 35),
           _buildBotonGuardar(),
         ],
@@ -353,6 +416,28 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
     );
   }
 
+  // NUEVO: Widget exclusivo para los campos de hora (Bloquea teclado y usa clics)
+  Widget _buildTimeField({required TextEditingController controller, required String label, required bool isDark, required VoidCallback onTap}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+      ),
+      child: TextField(
+        controller: controller,
+        readOnly: true, // Evita que se abra el teclado del celular
+        onTap: onTap,    // Abre el reloj nativo
+        decoration: InputDecoration(
+          prefixIcon: Icon(Icons.access_time_rounded, color: colorPB),
+          labelText: label,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSwitchMetodo(String titulo, String subtitulo, bool valor, String campo, IconData icon) {
     return SwitchListTile(
       activeColor: colorPB,
@@ -451,7 +536,7 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
                   
               _emailAyudanteController.clear();
               if (context.mounted) Navigator.pop(context);
-              _cargarDatos(); // Sincroniza la lista de equipo de inmediato
+              _cargarDatos(); 
             },
             style: ElevatedButton.styleFrom(backgroundColor: colorPB, foregroundColor: Colors.white),
             child: const Text("Vincular"),
@@ -499,7 +584,7 @@ class _ConfigurarNegocioPageState extends State<ConfigurarNegocioPage> {
             bottom: 0, 
             right: 0, 
             child: GestureDetector(
-              onTap: _cambiarLogo, // Ahora ejecuta la función de cambio de logo
+              onTap: _cambiarLogo, 
               child: CircleAvatar(
                 backgroundColor: colorPB, 
                 radius: 20,

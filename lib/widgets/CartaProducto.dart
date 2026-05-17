@@ -18,6 +18,7 @@ class CartaProducto extends StatelessWidget {
     this.onDelete,
   });
 
+  // MÉTODOS ASÍNCRONOS
   Future<List<String>> _obtenerFotos() async {
     try {
       final response = await Supabase.instance.client
@@ -28,6 +29,33 @@ class CartaProducto extends StatelessWidget {
       return (response as List).map((item) => item['url'] as String).toList();
     } catch (e) {
       return [];
+    }
+  }
+
+  // 👇 NUEVO MÉTODO: Va a la tabla 'negocios' a traer la ubicación física
+  Future<String> _obtenerUbicacionNegocio() async {
+    try {
+      // Si por alguna razón la vista ya la traía, la usamos de una vez
+      if (producto['ubicacion_negocio'] != null) {
+        return producto['ubicacion_negocio'].toString();
+      }
+
+      final idNegocio = producto['fk_negocio']; // Asegúrate de que este sea el nombre de la columna en tu tabla productos
+      if (idNegocio == null) return 'Pascual Bravo';
+
+      final response = await Supabase.instance.client
+          .from('negocios')
+          .select('ubicacion')
+          .eq('id', idNegocio)
+          .maybeSingle();
+
+      if (response != null && response['ubicacion'] != null) {
+        return response['ubicacion'].toString();
+      }
+      return 'Pascual Bravo';
+    } catch (e) {
+      debugPrint("Error obteniendo ubicación: $e");
+      return 'Pascual Bravo';
     }
   }
 
@@ -96,7 +124,6 @@ class CartaProducto extends StatelessWidget {
                     ),
                   ),
                   
-                  // Botones de Admin
                   if (esAdmin)
                     Positioned(
                       top: 10,
@@ -125,20 +152,29 @@ class CartaProducto extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
+                    
+                    // 👇 MODIFICACIÓN AQUÍ: Ubicación cargada dinámicamente con FutureBuilder
                     Row(
                       children: [
                         Icon(Icons.location_on_outlined, size: 12, color: Colors.grey[500]),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
-                            producto['ubicacion_negocio'] ?? 'Pascual Bravo', 
-                            style: TextStyle(color: Colors.grey[500], fontSize: 11),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: FutureBuilder<String>(
+                            future: _obtenerUbicacionNegocio(),
+                            builder: (context, snapshot) {
+                              final textoUbicacion = snapshot.data ?? 'Cargando...';
+                              return Text(
+                                textoUbicacion, 
+                                style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
                           ),
                         ),
                       ],
                     ),
+                    
                     const SizedBox(height: 10),
                     Text(
                       monedaCop.format(producto['precio'] ?? 0),
