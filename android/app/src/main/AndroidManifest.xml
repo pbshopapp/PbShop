@@ -9,7 +9,7 @@
     <application
         android:label="pbshop"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/launcher_icon">
 
         <receiver
             android:name="be.tramckas.workmanager.WorkmanagerCallReceiver"
