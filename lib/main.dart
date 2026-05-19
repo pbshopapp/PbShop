@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'servicios/TemaApp.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -68,34 +69,32 @@ class PBShopApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: navigatorKey,
-      debugShowCheckedModeBanner: false,
-      title: 'PB Shop',
-      
-      // TEMA CLARO (El que ya tienes)
-      theme: ThemeData(
-        brightness: Brightness.light,
-        primaryColor: const Color.fromRGBO(0, 180, 195, 1),
-        useMaterial3: true,
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(backgroundColor: Color.fromRGBO(0, 180, 195, 1)),
-      ),
-
-      // TEMA OSCURO
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        primaryColor: const Color.fromRGBO(0, 180, 195, 1),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF121212), // Un negro mate elegante
-        appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF1F1F1F)),
-        cardTheme: CardThemeData(color: Color(0xFF1E1E1E)),
-        // Esto asegura que tus textos se adapten automáticamente
-      ),
-
-      // Esto hace que la app use el modo del sistema (si el cel está en oscuro, la app también)
-      themeMode: ThemeMode.system,
-      home: const home_page(), 
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppTema.notifier, // 👈 2. Escucha al archivo centralizado
+      builder: (context, modoTemaActual, child) {
+        return MaterialApp(
+          navigatorKey: navigatorKey,
+          debugShowCheckedModeBanner: false,
+          title: 'PB Shop',
+          theme: ThemeData(
+            brightness: Brightness.light,
+            primaryColor: const Color.fromRGBO(0, 180, 195, 1),
+            useMaterial3: true,
+            scaffoldBackgroundColor: Colors.white,
+            appBarTheme: const AppBarTheme(backgroundColor: Color.fromRGBO(0, 180, 195, 1)),
+          ),
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            primaryColor: const Color.fromRGBO(0, 180, 195, 1),
+            useMaterial3: true,
+            scaffoldBackgroundColor: const Color(0xFF121212), 
+            appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF1F1F1F)),
+            cardTheme: const CardThemeData(color: Color(0xFF1E1E1E)),
+          ),
+          themeMode: modoTemaActual, // 👈 3. Aplica el cambio
+          home: const home_page(), 
+        );
+      },
     );
   }
 }

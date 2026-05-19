@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/CartService.dart' as CartServiceLib;
 import 'package:pbshop/widgets/CuadroDeImagenes.dart';
 import 'package:intl/intl.dart';
+import 'package:pbshop/servicios/HorarioHelper.dart';
 
 class product_page extends StatefulWidget {
   final Map producto;
@@ -101,7 +102,6 @@ class _product_pageState extends State<product_page> {
     final TextEditingController controller = TextEditingController(text: _esEdicion ? _comentarioPrevio : "");
     double estrellas = _esEdicion ? _estrellasPrevias : 0;
 
-    // 1. Esperamos el resultado directo del diálogo (un Map con los nuevos datos)
     final Map<String, dynamic>? resultado = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => AlertDialog(
@@ -147,7 +147,6 @@ class _product_pageState extends State<product_page> {
 
               try {
                 if (_esEdicion) {
-                  // MODO EDICIÓN
                   await Supabase.instance.client
                       .from('resenas')
                       .update({
@@ -157,7 +156,6 @@ class _product_pageState extends State<product_page> {
                       .eq('id', _idResenaExistente!);
                   
                   if (context.mounted) {
-                    // Retornamos los datos frescos para actualizar el estado local
                     Navigator.pop(context, {
                       'puntuacion': estrellas,
                       'comentario': comentarioTexto,
@@ -165,14 +163,13 @@ class _product_pageState extends State<product_page> {
                     });
                   }
                 } else {
-                  // MODO INSERCIÓN
                   final nuevaResena = await Supabase.instance.client.from('resenas').insert({
                     'fk_pedido': _idPedidoMapeado,
                     'puntuacion': estrellas.toInt(),
                     'comentario': comentarioTexto,
                     'fk_usuario': Supabase.instance.client.auth.currentUser!.id,
                     'fk_producto': widget.producto['id'], 
-                  }).select('id').single(); // Traemos el ID generado por la BD
+                  }).select('id').single();
                   
                   if (context.mounted) {
                     Navigator.pop(context, {
@@ -196,10 +193,9 @@ class _product_pageState extends State<product_page> {
       ),
     );
 
-    // 2. Si el diálogo retornó datos válidos, forzamos el redibujado local INMEDIATO
     if (resultado != null && mounted) {
       setState(() {
-        _esEdicion = true; // Ya tiene una reseña guardada o actualizada
+        _esEdicion = true; 
         _estrellasPrevias = (resultado['puntuacion'] as num).toDouble();
         _comentarioPrevio = resultado['comentario'].toString();
         _idResenaExistente = resultado['id_resena'].toString();
@@ -211,6 +207,9 @@ class _product_pageState extends State<product_page> {
   Widget build(BuildContext context) {
     final String imagenSegura = widget.producto['imagen_url'] ?? '';
     final esOscuro = Theme.of(context).brightness == Brightness.dark;
+
+    final String horarioTienda = widget.producto['horario']?.toString() ?? "24 Horas";
+    final bool estaAbierto = HorarioHelper.estaAbierto(horarioTienda);
 
     return Scaffold(
       backgroundColor: esOscuro ? Colors.black : Colors.white,
@@ -235,7 +234,6 @@ class _product_pageState extends State<product_page> {
         child: Column(
           children: [
             const SizedBox(height: 40), 
-            // --- IMAGENES ---
             SizedBox(
               height: MediaQuery.of(context).size.height * 0.45,
               width: double.infinity,
@@ -251,7 +249,6 @@ class _product_pageState extends State<product_page> {
               ),
             ),
 
-            // --- PANEL DE INFORMACIÓN ---
             Transform.translate(
               offset: const Offset(0, -30),
               child: Container(
@@ -312,7 +309,7 @@ class _product_pageState extends State<product_page> {
           ],
         ),
       ),
-      bottomSheet: _buildBarraAccionCompra(esOscuro),
+      bottomSheet: _buildBarraAccionCompra(esOscuro, estaAbierto),
     );
   }
 
@@ -337,7 +334,7 @@ class _product_pageState extends State<product_page> {
     );
   }
 
-  Widget _buildBarraAccionCompra(bool esOscuro) {
+  Widget _buildBarraAccionCompra(bool esOscuro, bool estaAbierto) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -346,47 +343,18 @@ class _product_pageState extends State<product_page> {
       ),
       child: SafeArea(
         child: ElevatedButton(
-          onPressed: _estaProcesando 
+          // 👈 AQUÍ ESTÁ EL CAMBIO CLAVE:
+          // Si está cargando o la tienda está cerrada, pasamos 'null' para apagar por completo el botón.
+          onPressed: (_estaProcesando || !estaAbierto) 
               ? null 
-              : () {
-                  final bool estaAbierto = widget.producto['esta_abierto'] ?? true;
-
-                  if (!estaAbierto) {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        title: const Row(
-                          children: [
-                            Icon(Icons.store_rounded, color: Colors.redAccent),
-                            SizedBox(width: 10),
-                            Text("Tienda Cerrada"),
-                          ],
-                        ),
-                        content: const Text(
-                          "Lo sentimos, este emprendimiento se encuentra fuera de su horario de atención y no está recibiendo pedidos en este momento.",
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text(
-                              "Entendido", 
-                              style: TextStyle(color: Color.fromRGBO(0, 180, 195, 1), fontWeight: FontWeight.bold)
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                    return; 
-                  }
-
-                  _agregarAlPedido(context);
-                },
+              : () => _agregarAlPedido(context),
           style: ElevatedButton.styleFrom(
-            backgroundColor: (widget.producto['esta_abierto'] ?? true) 
-                ? _colorInstitucional 
-                : Colors.grey[400], 
+            // Color cuando está activo vs color gris por defecto de Flutter cuando se pasa null
+            backgroundColor: _colorInstitucional, 
             foregroundColor: Colors.white,
+            // Ajustamos el color de deshabilitado explícitamente para que mantenga tu estética limpia
+            disabledBackgroundColor: esOscuro ? Colors.grey[900] : Colors.grey[300],
+            disabledForegroundColor: esOscuro ? Colors.grey[600] : Colors.grey[500],
             minimumSize: const Size(double.infinity, 60),
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -398,7 +366,7 @@ class _product_pageState extends State<product_page> {
                 child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)
               )
             : Text(
-                (widget.producto['esta_abierto'] ?? true) ? "Agregar al carrito" : "Local Cerrado",
+                estaAbierto ? "Agregar al carrito" : "Local Cerrado",
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
               ),
         ),
@@ -426,7 +394,7 @@ class _product_pageState extends State<product_page> {
         )
       );
     } catch (e) {
-      // Manejo de error
+      debugPrint("Error al agregar al carrito: $e");
     } finally {
       setState(() => _estaProcesando = false);
     }
@@ -444,7 +412,6 @@ class _product_pageState extends State<product_page> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- BOTÓN DINÁMICO DE CALIFICACIÓN O EDICIÓN ---
             if (_puedeResenar) ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
@@ -465,7 +432,6 @@ class _product_pageState extends State<product_page> {
               ),
             ],
 
-            // --- MANEJO DE ESTADO VACÍO O LISTADO ---
             if (resenas.isEmpty)
               Container(
                 width: double.infinity,
@@ -512,7 +478,7 @@ class _product_pageState extends State<product_page> {
 }
 
 class RatingBarCustom extends StatefulWidget {
-  final int initialRating; // 👈 Agregamos propiedad para recibir nota inicial
+  final int initialRating; 
   final Function(double) onRatingSelected;
   
   const RatingBarCustom({
@@ -531,7 +497,7 @@ class _RatingBarCustomState extends State<RatingBarCustom> {
   @override
   void initState() {
     super.initState();
-    _rating = widget.initialRating; // 👈 Sincronizamos las estrellas con el estado inicial
+    _rating = widget.initialRating; 
   }
 
   @override

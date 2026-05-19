@@ -16,89 +16,88 @@ class EncabezadoAnimado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Obtenemos el padding superior (Notch/Barra de estado)
     final double paddingSuperior = MediaQuery.of(context).padding.top;
     const Color colorInstitucional = Color.fromRGBO(0, 180, 195, 1);
     
-    // Altura cómoda que da espacio al logo grande y textos sin colapsar
-    final double alturaExpandida = 240.0 + paddingSuperior;
+    // Altura personalizada según el dispositivo (puedes subirla en PC si quieres)
+    final double alturaExpandida = 220.0 + paddingSuperior;
 
     return SliverAppBar(
       expandedHeight: alturaExpandida,
       pinned: true,
       elevation: 0,
+      // El toolbar debe ser al menos el padding + un tamaño cómodo para el logo pequeño
       toolbarHeight: 60 + paddingSuperior, 
       backgroundColor: colorInstitucional,
       flexibleSpace: LayoutBuilder(
         builder: (context, constraints) {
           double top = constraints.biggest.height;
-          double limiteToolbar = 60 + paddingSuperior;
           
-          // Calculamos la opacidad de los elementos basados en el scroll
-          double opacity = ((top - limiteToolbar) / (alturaExpandida - limiteToolbar)).clamp(0.0, 1.0);
+          // Calculamos la opacidad de los textos basándonos en el scroll
+          double opacity = ((top - (60 + paddingSuperior)) / (alturaExpandida - (60 + paddingSuperior))).clamp(0.0, 1.0);
           
-          // Tamaño dinámico del logo (Más grande cuando está expandido, se reduce al hacer scroll)
-          double logoSize = opacity > 0.2 ? (90 * opacity).clamp(40.0, 90.0) : 40.0;
+          // El tamaño del logo ahora es relativo al ancho o alto, lo que sea menor (para PC)
+          double anchoPantalla = MediaQuery.of(context).size.width;
+          double baseSize = anchoPantalla > 600 ? 120 : top * 0.4; // Límite para PC
+          
+          double logoSize = (top > 100 + paddingSuperior) 
+              ? baseSize.clamp(50.0, 100.0) 
+              : 50.0;
 
-          return FlexibleSpaceBar(
-            titlePadding: EdgeInsets.zero,
-            centerTitle: true,
-            // 1. Cuando la barra colapsa, este es el widget que se queda fijo en el toolbar
-            title: opacity < 0.15
-                ? Container(
-                    padding: EdgeInsets.only(top: paddingSuperior),
-                    height: 50,
-                    child: mostrarLogo
-                        ? Image.asset('recursos/imagenes/Pb-shop-logo.png', fit: BoxFit.contain)
-                        : (iconoAlternativo ?? const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 24)),
-                  )
-                : null,
-            // 2. Cuando la barra está expandida (Vista principal), se muestra la estructura limpia
-            background: Opacity(
-              opacity: opacity,
-              child: Padding(
-                padding: EdgeInsets.only(top: paddingSuperior + 20, bottom: 10),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // LOGO (Integrado a la columna para que empuje los textos dinámicamente)
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 100),
-                      height: logoSize,
-                      child: mostrarLogo
-                          ? Image.asset('recursos/imagenes/Pb-shop-logo.png', fit: BoxFit.contain)
-                          : (iconoAlternativo ?? const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 50)),
-                    ),
-                    const SizedBox(height: 10),
-                    // TÍTULO
-                    Text(
-                      titulo,
-                      style: const TextStyle(
-                        color: Colors.white, 
-                        fontSize: 26, 
-                        fontWeight: FontWeight.w900
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    // SUBTÍTULO
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      key: UniqueKey(), // Fuerza el redibujado correcto en cambios de tamaño
-                      child: Text(
-                        subtitulo,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+          // La posición TOP ahora suma el paddingSuperior para no chocar con la cámara
+          double posicionTop = (top > 100 + paddingSuperior) 
+              ? (top * 0.2 + (paddingSuperior * 0.5)).clamp(paddingSuperior + 5, 80.0) 
+              : paddingSuperior + 5;
+
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // TEXTOS
+              Opacity(
+                opacity: opacity,
+                child: FlexibleSpaceBar(
+                  background: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(height: 80 + paddingSuperior), 
+                      Text(
+                        titulo,
                         style: const TextStyle(
-                          color: Colors.white70, 
-                          fontSize: 13, 
-                          fontStyle: FontStyle.italic
+                          color: Colors.white, 
+                          fontSize: 26, 
+                          fontWeight: FontWeight.w900
                         ),
                       ),
-                    ),
-                  ],
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          subtitulo,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white70, 
+                            fontSize: 14, 
+                            fontStyle: FontStyle.italic
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+              
+              // LOGO O ICONO (Flotante y Responsivo)
+              Positioned(
+                top: posicionTop,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  height: logoSize,
+                  child: mostrarLogo 
+                    ? Image.asset('recursos/imagenes/Pb-shop-logo.png', fit: BoxFit.contain)
+                    : (iconoAlternativo ?? const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 40)),
+                ),
+              ),
+            ],
           );
         },
       ),

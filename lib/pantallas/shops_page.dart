@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/widgets/CartaNegocio.dart';
-// Asegúrate de importar donde tengas el widget EncabezadoAnimado
 import 'package:pbshop/widgets/EncabezadoAnimado.dart'; 
+import 'package:pbshop/servicios/HorarioHelper.dart'; // 👈 Importamos el Helper para validar los locales
 
 class shops_page extends StatelessWidget {
   const shops_page({super.key});
@@ -14,14 +14,12 @@ class shops_page extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: esOscuro ? Colors.black : const Color(0xFFF8F9FA),
-      // Eliminamos el AppBar tradicional para usar el animado en el body
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: Supabase.instance.client
             .from('negocios')
             .stream(primaryKey: ['id'])
             .order('nombre', ascending: true),
         builder: (context, snapshot) {
-          // Usamos CustomScrollView para que el EncabezadoAnimado pueda reaccionar al scroll
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
@@ -41,7 +39,7 @@ class shops_page extends StatelessWidget {
                 SliverFillRemaining(
                   child: _buildEmptyState(),
                 )
-              else
+              else ...[
                 // 3. LA CUADRÍCULA DE TIENDAS
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -54,7 +52,15 @@ class shops_page extends StatelessWidget {
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final negocio = snapshot.data![index];
+                        // Creamos una copia mutable del mapa del negocio para poder inyectar datos localmente
+                        final Map<String, dynamic> negocio = Map<String, dynamic>.from(snapshot.data![index]);
+                        
+                        // Extraemos el horario guardado en la base de datos o por defecto "24 Horas"
+                        final String horarioLocal = negocio['horario']?.toString() ?? "24 Horas";
+                        
+                        // 👈 Inyectamos la validación del HorarioHelper en el mapa del negocio
+                        negocio['esta_abierto'] = HorarioHelper.estaAbierto(horarioLocal);
+
                         return Hero(
                           tag: 'negocio_${negocio['id']}',
                           child: CartaNegocio(negocio: negocio),
@@ -64,6 +70,7 @@ class shops_page extends StatelessWidget {
                     ),
                   ),
                 ),
+              ],
             ],
           );
         },

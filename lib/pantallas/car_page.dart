@@ -1,11 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pbshop/servicios/CartService.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
-// Asegúrate de importar el widget del encabezado
+import 'dart:typed_data'; // 👈 Importante para manejar los bytes de la imagen
 import 'package:pbshop/widgets/EncabezadoAnimado.dart';
 
 class car_page extends StatefulWidget {
@@ -23,7 +22,9 @@ class _car_pageState extends State<car_page> {
   
   final Map<String, TextEditingController> _notaControllers = {};
   final Map<String, bool> _mostrandoPago = {}; 
-  final Map<String, File?> _comprobantes = {};
+  
+  // 👈 CAMBIO 1: Cambiamos File? por Uint8List? para guardar los bytes de la imagen de forma híbrida
+  final Map<String, Uint8List?> _comprobantesBytes = {}; 
   final Map<String, String?> _metodoSeleccionado = {}; 
 
   @override
@@ -34,7 +35,6 @@ class _car_pageState extends State<car_page> {
     super.dispose();
   }
 
-  // ... (Toda tu lógica de _confirmarPedido y _mostrarMensaje se mantiene igual) ...
   Future<void> _confirmarPedido(String idNegocio, List<ItemCarrito> itemsTienda) async {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
@@ -54,9 +54,17 @@ class _car_pageState extends State<car_page> {
       }
 
       String? imageUrl;
-      if (metodo == 'transferencia' && _comprobantes[idNegocio] != null) {
+      // 👈 CAMBIO 2: Validamos contra el mapa de bytes
+      if (metodo == 'transferencia' && _comprobantesBytes[idNegocio] != null) {
         final String fileName = '${user.id}/${DateTime.now().millisecondsSinceEpoch}.jpg';
-        await supabase.storage.from('comprobantes').upload(fileName, _comprobantes[idNegocio]!);
+        
+        // 👈 CAMBIO 3: Usamos uploadBinary en lugar de upload. Esto es compatible con Web y Celular.
+        await supabase.storage.from('comprobantes').uploadBinary(
+          fileName, 
+          _comprobantesBytes[idNegocio]!,
+          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+        );
+        
         imageUrl = supabase.storage.from('comprobantes').getPublicUrl(fileName);
       }
 
@@ -83,7 +91,7 @@ class _car_pageState extends State<car_page> {
 
       setState(() {
         _cartService.items.removeWhere((item) => item.fkNegocio == idNegocio);
-        _comprobantes.remove(idNegocio);
+        _comprobantesBytes.remove(idNegocio); // 👈 Limpiamos el mapa de bytes
         _mostrandoPago.remove(idNegocio);
         _metodoSeleccionado.remove(idNegocio);
       });
@@ -107,13 +115,11 @@ class _car_pageState extends State<car_page> {
     
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      // Usamos CustomScrollView para integrar el EncabezadoAnimado
       body: ListenableBuilder(
         listenable: _cartService,
         builder: (context, _) {
           final items = _cartService.items;
 
-          // Mapa de productos agrupados por tienda
           final Map<String, List<ItemCarrito>> gruposPorTienda = {};
           for (var item in items) {
             gruposPorTienda.putIfAbsent(item.fkNegocio, () => []).add(item);
@@ -122,11 +128,10 @@ class _car_pageState extends State<car_page> {
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // 1. EL ENCABEZADO PERSONALIZADO PARA EL CARRITO
               const EncabezadoAnimado(
                 titulo: "Mi Carrito",
                 subtitulo: "Finaliza tus compras pascualinas",
-                mostrarLogo: false, // Usamos icono en lugar de logo
+                mostrarLogo: false,
                 iconoAlternativo: Icon(
                   Icons.shopping_cart_checkout_rounded,
                   color: Colors.white,
@@ -134,7 +139,6 @@ class _car_pageState extends State<car_page> {
                 ),
               ),
 
-              // 2. CONTENIDO DEL CARRITO
               if (items.isEmpty)
                 const SliverFillRemaining(
                   child: Center(
@@ -167,9 +171,6 @@ class _car_pageState extends State<car_page> {
       ),
     );
   }
-
-  // --- El resto de tus métodos de construcción (_buildSeccionTienda, _buildVistaPago, etc.) 
-  // se mantienen exactamente igual a como los tenías ---
 
   Widget _buildSeccionTienda(String idNegocio, List<ItemCarrito> itemsTienda) {
     bool enModoPago = _mostrandoPago[idNegocio] ?? false;
@@ -332,14 +333,19 @@ class _car_pageState extends State<car_page> {
     return GestureDetector(
       onTap: () async {
         final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 70);
-        if (img != null) setState(() => _comprobantes[idNegocio] = File(img.path));
+        if (img != null) {
+          // 👈 CAMBIO 4: En lugar de crear un objeto File, extraemos los bytes del XFile de inmediato
+          final bytes = await img.readAsBytes();
+          setState(() => _comprobantesBytes[idNegocio] = bytes);
+        }
       },
       child: Container(
         height: 120, width: double.infinity,
         decoration: BoxDecoration(border: Border.all(color: theme.dividerColor), borderRadius: BorderRadius.circular(12)),
-        child: _comprobantes[idNegocio] == null 
+        child: _comprobantesBytes[idNegocio] == null 
           ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, color: theme.hintColor), Text("Subir Comprobante", style: TextStyle(fontSize: 12, color: theme.hintColor))])
-          : ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_comprobantes[idNegocio]!, fit: BoxFit.cover)),
+          // 👈 CAMBIO 5: Reemplazamos Image.file por Image.memory pasándole los bytes guardados
+          : ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(_comprobantesBytes[idNegocio]!, fit: BoxFit.cover)),
       ),
     );
   }
@@ -347,7 +353,7 @@ class _car_pageState extends State<car_page> {
   bool _puedeFinalizar(String idNegocio) {
     final m = _metodoSeleccionado[idNegocio];
     if (m == 'efectivo' || m == 'api') return true;
-    if (m == 'transferencia' && _comprobantes[idNegocio] != null) return true;
+    if (m == 'transferencia' && _comprobantesBytes[idNegocio] != null) return true; // 👈 Ajuste de validación
     return false;
   }
 
